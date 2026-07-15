@@ -1,7 +1,7 @@
 "use strict";
 
 /*
- * めいまねつーる Phase 3.1
+ * めいまねつーる Phase 3.2
  * キャラクターの追加・編集・削除・検索、完了・お気に入り状態を LocalStorage に保存します。
  */
 
@@ -15,13 +15,25 @@ const DEFAULT_DAILY_GOAL = 3;
 const EXP_BASE_REQUIREMENT = 100;
 const EXP_PER_LEVEL = 25;
 const DEFAULT_DAILY_TITLES = ["デイリー 1", "デイリー 2", "デイリー 3"];
-const JOB_SERIES = ["", "戦士", "魔法使い", "盗賊", "弓使い", "海賊"];
+const JOB_CATALOG = {
+  "戦士": ["ヒーロー", "パラディン", "ダークナイト", "アラン", "ソウルマスター", "デーモンスレイヤー", "デーモンアヴェンジャー", "ブラスター", "カイザー", "ハヤト", "アデル", "エリル"],
+  "魔法使い": ["ビショップ", "アークメイジ（火・毒）", "アークメイジ（氷・雷）", "フレイムウィザード", "バトルメイジ", "エヴァン", "ルミナス", "カンナ", "キネシス", "リン", "シア"],
+  "弓使い": ["ボウマスター", "クロスボウマスター", "パスファインダー", "ウィンドシューター", "ワイルドハンター", "メルセデス"],
+  "盗賊": ["ナイトロード", "シャドー", "デュアルブレイド", "ナイトウォーカー", "ファントム", "ゼノン"],
+  "海賊": ["キャプテン", "バイパー", "キャノンシューター", "ストライカー", "メカニック", "隠月", "アーク", "エンジェリックバスター", "ゼノン"],
+};
+const JOB_SERIES = ["", ...Object.keys(JOB_CATALOG), "ハイブリッド"];
+const JOB_TO_SERIES = Object.entries(JOB_CATALOG).reduce((map, [series, jobs]) => {
+  jobs.forEach((job) => { map[job] = job === "ゼノン" ? "ハイブリッド" : series; });
+  return map;
+}, {});
 const SERIES_CLASS_NAMES = {
   "戦士": "series-warrior",
   "魔法使い": "series-mage",
   "盗賊": "series-thief",
   "弓使い": "series-archer",
   "海賊": "series-pirate",
+  "ハイブリッド": "series-hybrid",
 };
 
 // UI text is kept together so it is easy to change without touching rendering logic.
@@ -37,7 +49,7 @@ const SORT_DEFAULT = "default";
 const SORT_FAVORITE = "favorite";
 const SORT_LEVEL = "level";
 const SORT_NAME = "name";
-const BACKUP_VERSION = "3.1";
+const BACKUP_VERSION = "3.2";
 const BACKUP_FILE_PREFIX = "meimane-tool-backup";
 
 const elements = {
@@ -97,6 +109,20 @@ function normalizeExp(value) {
 function normalizeNonNegativeInteger(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? Math.floor(number) : fallback;
+}
+
+/** Known jobs always determine their series; legacy custom jobs keep their saved series. */
+function getSeriesForJob(job, fallback = "") {
+  return JOB_TO_SERIES[job] || (JOB_SERIES.includes(fallback) ? fallback : "");
+}
+
+/** Keep pre-Phase 3.2 custom jobs editable without losing their saved value. */
+function ensureJobOption(job) {
+  if (!job || Array.from(elements.job.options).some((option) => option.value === job)) return;
+  const option = document.createElement("option");
+  option.value = job;
+  option.textContent = `既存職業: ${job}`;
+  elements.job.insertBefore(option, elements.job.children[1] || null);
 }
 
 function createDaily(title, checked = false) {
@@ -171,7 +197,7 @@ function normalizeCharacter(record) {
     id: typeof record.id === "string" && record.id ? record.id : createId(),
     name: record.name.trim(),
     job: typeof record.job === "string" ? record.job.trim().slice(0, 20) : "",
-    series: JOB_SERIES.includes(record.series) ? record.series : "",
+    series: getSeriesForJob(record.job, record.series),
   };
   const progress = {
     level: normalizeLevel(record.level) || "1",
@@ -329,10 +355,10 @@ function renderCard(character) {
   const expMeta = document.createElement("div");
   expMeta.className = "exp-meta";
   const expValues = document.createElement("span");
-  expValues.textContent = `EXP ${exp.current} / ${exp.goal}`;
+  expValues.textContent = `EXP ${exp.percent.toFixed(2)}%`;
   const expPercent = document.createElement("span");
   expPercent.className = "exp-percent";
-  expPercent.textContent = `${exp.percent.toFixed(2)}%`;
+  expPercent.textContent = "前日終了時";
   expMeta.append(expValues, expPercent);
   const expBar = document.createElement("div");
   expBar.className = "exp-bar";
@@ -346,7 +372,9 @@ function renderCard(character) {
   expBar.append(expFill);
   const nextLevel = document.createElement("div");
   nextLevel.className = "next-level";
-  nextLevel.textContent = character.level === String(MAX_LEVEL) ? "MAX LEVEL" : `次のレベル進捗 ${exp.percent.toFixed(2)}%`;
+  nextLevel.textContent = character.level === String(MAX_LEVEL)
+    ? "MAX LEVEL"
+    : `次のレベルまで ${(100 - exp.percent).toFixed(2)}%`;
   expSection.append(expMeta, expBar, nextLevel);
 
   card.append(header, nameRow, level, expSection);
@@ -523,29 +551,40 @@ function createCharacterFormExtensions() {
   const jobLabel = document.createElement("label");
   jobLabel.htmlFor = "characterJob";
   jobLabel.textContent = "職業";
-  const jobInput = document.createElement("input");
+  const jobInput = document.createElement("select");
   jobInput.id = "characterJob";
-  jobInput.type = "text";
-  jobInput.maxLength = 20;
-  jobInput.autocomplete = "off";
-  jobInput.placeholder = "例: 戦士";
+  const jobPlaceholder = document.createElement("option");
+  jobPlaceholder.value = "";
+  jobPlaceholder.textContent = "選択しない";
+  jobInput.append(jobPlaceholder);
+  Object.entries(JOB_CATALOG).forEach(([series, jobs]) => {
+    const group = document.createElement("optgroup");
+    group.label = series;
+    jobs.forEach((job) => {
+      const option = document.createElement("option");
+      option.value = job;
+      option.textContent = job;
+      group.append(option);
+    });
+    jobInput.append(group);
+  });
   form.insertBefore(jobLabel, levelLabel);
   form.insertBefore(jobInput, levelLabel);
   const seriesLabel = document.createElement("label");
   seriesLabel.htmlFor = "characterSeries";
   seriesLabel.textContent = "系列";
-  const seriesSelect = document.createElement("select");
+  const seriesSelect = document.createElement("input");
   seriesSelect.id = "characterSeries";
-  JOB_SERIES.forEach((series) => {
-    const option = document.createElement("option");
-    option.value = series;
-    option.textContent = series || "選択しない";
-    seriesSelect.append(option);
-  });
+  seriesSelect.type = "text";
+  seriesSelect.readOnly = true;
+  seriesSelect.placeholder = "職業を選ぶと自動設定";
   form.insertBefore(seriesLabel, levelLabel);
   form.insertBefore(seriesSelect, levelLabel);
   elements.job = jobInput;
   elements.series = seriesSelect;
+  elements.job.addEventListener("change", () => {
+    elements.series.value = getSeriesForJob(elements.job.value);
+  });
 }
 
 const dailyEditor = {};
@@ -786,8 +825,9 @@ function openEditDialog(id) {
   editingId = character.id;
   elements.dialogTitle.textContent = EDIT_DIALOG_TITLE;
   elements.name.value = character.name;
+  ensureJobOption(character.job);
   elements.job.value = character.job;
-  elements.series.value = character.series;
+  elements.series.value = getSeriesForJob(character.job, character.series);
   elements.level.value = character.level;
   elements.exp.value = character.previousExp;
   elements.deleteButton.hidden = false;
@@ -802,8 +842,8 @@ function closeDialog() {
 function readForm() {
   return {
     name: elements.name.value.trim(),
-    job: elements.job.value.trim(),
-    series: elements.series.value,
+    job: elements.job.value,
+    series: getSeriesForJob(elements.job.value, elements.series.value),
     level: normalizeLevel(elements.level.value),
     previousExp: normalizeExp(elements.exp.value),
   };
