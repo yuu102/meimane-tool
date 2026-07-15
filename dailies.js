@@ -1,31 +1,93 @@
 import { createId } from "./utils.js";
 
-const defaultTitles = ["デイリー 1", "デイリー 2", "デイリー 3"];
+const legacyTitles = ["デイリー 1", "デイリー 2", "デイリー 3"];
 
-export function createDaily(title, checked = false) {
-  return { id: createId(), title, checked: checked === true };
+export function createDaily(templateOrTitle, checked = false) {
+  const template = templateOrTitle && typeof templateOrTitle === "object" ? templateOrTitle : null;
+  const title = template ? template.title : templateOrTitle;
+  return {
+    id: createId(),
+    ...(template ? { templateId: template.id } : {}),
+    title: typeof title === "string" ? title.trim().slice(0, 40) : "",
+    checked: checked === true,
+  };
 }
 
-export function createDefaultDailies(titles = defaultTitles) {
-  return titles.map((title) => createDaily(title));
+export function createDefaultDailies(template) {
+  return (Array.isArray(template) ? template : []).map((item) => createDaily(item));
 }
 
-export function normalizeDailies(record) {
-  if (Array.isArray(record.dailies)) {
-    const used = new Set();
-    return record.dailies
-      .filter((item) => item && typeof item.title === "string")
-      .map((item) => {
-        let id = typeof item.id === "string" && item.id ? item.id : createId();
-        if (used.has(id)) id = createId();
-        used.add(id);
-        return { id, title: item.title.trim().slice(0, 40), checked: item.checked === true };
-      });
-  }
+function normalizedSourceDailies(record) {
+  if (Array.isArray(record.dailies)) return record.dailies;
   const legacy = record.daily && typeof record.daily === "object" ? record.daily : {};
   const goal = Math.max(1, Math.floor(Number(legacy.goal ?? legacy.target) || 3));
   const progress = Math.min(goal, Math.max(0, Math.floor(Number(legacy.progress ?? legacy.count ?? legacy.completed) || 0)));
-  return Array.from({ length: goal }, (_, index) => createDaily(`デイリー ${index + 1}`, index < progress));
+  return Array.from({ length: goal }, (_, index) => ({ title: legacyTitles[index] || `デイリー ${index + 1}`, checked: index < progress }));
+}
+
+/**
+ * 既存のtemplateIdがないデイリーは、同タイトルのテンプレートへ順番に対応付ける。
+ * 同名が複数ある場合でも、テンプレート順とキャラ側の並び順を優先する。
+ */
+export function normalizeDailies(record, template = []) {
+  const usedIds = new Set();
+  const dailies = normalizedSourceDailies(record).reduce((items, entry) => {
+    if (!entry || typeof entry.title !== "string") return items;
+    const title = entry.title.trim().slice(0, 40);
+    if (!title) return items;
+    let id = typeof entry.id === "string" ? entry.id.trim() : "";
+    if (!id || usedIds.has(id)) id = createId();
+    usedIds.add(id);
+    items.push({
+      id,
+      ...(typeof entry.templateId === "string" && entry.templateId.trim() ? { templateId: entry.templateId.trim() } : {}),
+      title,
+      checked: entry.checked === true,
+    });
+    return items;
+  }, []);
+
+  const usedDailyIndexes = new Set();
+  template.forEach((item) => {
+    const index = dailies.findIndex((daily, dailyIndex) => !usedDailyIndexes.has(dailyIndex) && !daily.templateId && daily.title === item.title);
+    if (index >= 0) {
+      dailies[index].templateId = item.id;
+      usedDailyIndexes.add(index);
+    }
+  });
+  return dailies;
+}
+
+/** 設定テンプレートの変更を全キャラクターへID基準で反映する。 */
+export function applyTemplateToCharacter(character, previousTemplate, nextTemplate) {
+  const previousIds = new Set(previousTemplate.map((item) => item.id));
+  const nextIds = new Set(nextTemplate.map((item) => item.id));
+  const consumed = new Set();
+  const byTemplateId = new Map();
+  character.dailies.forEach((daily, index) => {
+    if (!daily.templateId || byTemplateId.has(daily.templateId)) return;
+    byTemplateId.set(daily.templateId, { daily, index });
+  });
+
+  const templateDailies = nextTemplate.map((item) => {
+    const found = byTemplateId.get(item.id);
+    if (found) {
+      consumed.add(found.index);
+      found.daily.title = item.title;
+      return found.daily;
+    }
+    return createDaily(item);
+  });
+
+  const customDailies = character.dailies.filter((daily, index) => {
+    if (consumed.has(index)) return false;
+    // 明示的にテンプレートから削除されたものだけ削除する。
+    if (daily.templateId && previousIds.has(daily.templateId) && !nextIds.has(daily.templateId)) return false;
+    return true;
+  });
+
+  character.dailies = [...templateDailies, ...customDailies];
+  syncCompleted(character);
 }
 
 export function syncCompleted(character) {
