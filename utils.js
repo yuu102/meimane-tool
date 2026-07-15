@@ -28,6 +28,19 @@ export function getPercentage(value) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
 
+/**
+ * 日課開始時から終了時までのEXP相当量を計算する。比較不能な値はnullを返す。
+ */
+export function calculateDailyExpGain({ level, previousLevel, previousExp, afterDailyExp }) {
+  if (afterDailyExp === "" || afterDailyExp === null || afterDailyExp === undefined) return null;
+  const currentLevel = Number(level);
+  const startLevel = Number(previousLevel);
+  const startExp = Number(previousExp);
+  const endExp = Number(afterDailyExp);
+  if (![currentLevel, startLevel, startExp, endExp].every(Number.isFinite) || currentLevel < startLevel) return null;
+  return Math.round(((currentLevel - startLevel) * 100 + endExp - startExp) * 100) / 100;
+}
+
 export function localDateKey(date = new Date()) {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);

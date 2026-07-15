@@ -25,17 +25,20 @@ const elements = {
   title: $("dialogTitle"),
   name: $("characterName"),
   level: $("characterLevel"),
+  previousLevel: $("characterPreviousLevel"),
   exp: $("characterExp"),
+  afterDailyExp: $("characterAfterDailyExp"),
   save: $("saveBtn"),
   cancel: $("cancelBtn"),
   remove: $("deleteBtn"),
-  counts: { total: $("characterCount"), completed: $("completeCount"), remain: $("remainCount") },
+  counts: { all: $("summaryAll"), completed: $("summaryCompleted"), remaining: $("summaryRemaining") },
 };
 const fields = createCharacterFields(elements);
 elements.job = fields.job;
 elements.series = fields.series;
 let editingId = null;
 let settings = loadSettings();
+let viewMode = settings.hideCompleted ? "remaining" : "all";
 
 function refresh() {
   render({
@@ -44,9 +47,10 @@ function refresh() {
     characters: getCharacters(),
     keyword: elements.search.value,
     sortMode: settings.sortMode,
-    hideCompleted: settings.hideCompleted,
+    viewMode,
     onOpenDetail: (id) => detail.open(id),
     onToggleFavorite: toggleFavorite,
+    onChangeViewMode: (mode) => { viewMode = mode; refresh(); },
   });
 }
 
@@ -90,6 +94,7 @@ async function restoreBackup(file) {
     settings = backup.settings ? normalizeSettings(backup.settings) : settings;
     replaceCharacters(backup.characters, settings.dailyTemplate);
     saveSettings(settings);
+    viewMode = settings.hideCompleted ? "remaining" : "all";
     applyAutoReset();
     refresh();
   } catch {
@@ -122,7 +127,9 @@ function openAdd() {
   elements.job.value = "";
   elements.series.value = "";
   elements.level.value = "";
+  elements.previousLevel.value = "";
   elements.exp.value = "";
+  elements.afterDailyExp.value = "";
   elements.remove.hidden = true;
   elements.dialog.showModal();
   elements.name.focus();
@@ -140,7 +147,9 @@ function openEdit(id) {
   elements.job.value = character.job;
   elements.series.value = seriesForJob(character.job, character.series);
   elements.level.value = character.level;
+  elements.previousLevel.value = character.previousLevel;
   elements.exp.value = character.previousExp;
+  elements.afterDailyExp.value = character.afterDailyExp;
   elements.remove.hidden = false;
   elements.dialog.showModal();
 }
@@ -148,7 +157,9 @@ function openEdit(id) {
 function saveForm() {
   const name = elements.name.value.trim();
   const level = normalizeLevel(elements.level.value);
+  const previousLevel = normalizeLevel(elements.previousLevel.value) || level;
   const previousExp = normalizePercentage(elements.exp.value);
+  const afterDailyExp = normalizePercentage(elements.afterDailyExp.value);
   if (!name || !level) {
     alert("キャラ名とレベルを入力してください。");
     return;
@@ -158,7 +169,9 @@ function saveForm() {
     job: elements.job.value,
     series: seriesForJob(elements.job.value, elements.series.value),
     level,
+    previousLevel,
     previousExp,
+    afterDailyExp,
   };
   if (editingId) updateCharacter(editingId, data);
   else addCharacter(data, settings.dailyTemplate);
@@ -191,7 +204,9 @@ elements.save.addEventListener("click", saveForm);
 elements.cancel.addEventListener("click", () => elements.dialog.close());
 elements.remove.addEventListener("click", removeCharacter);
 elements.level.addEventListener("input", () => { elements.level.value = normalizeLevel(elements.level.value); });
+elements.previousLevel.addEventListener("input", () => { elements.previousLevel.value = normalizeLevel(elements.previousLevel.value); });
 elements.exp.addEventListener("blur", () => { elements.exp.value = normalizePercentage(elements.exp.value); });
+elements.afterDailyExp.addEventListener("blur", () => { elements.afterDailyExp.value = normalizePercentage(elements.afterDailyExp.value); });
 elements.dialog.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.target.tagName !== "BUTTON") {
     event.preventDefault();

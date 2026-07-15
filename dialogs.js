@@ -1,4 +1,5 @@
 import { createId } from "./utils.js";
+import { calculateDailyExpGain, getPercentage } from "./utils.js";
 import { createJobSelect, seriesForJob } from "./jobs.js";
 
 export function createCharacterFields(elements) {
@@ -40,9 +41,28 @@ export function createDetailDialog(actions) {
     const status = document.createElement("p");
     status.className = `detail-status ${character.completed ? "is-completed" : ""}`;
     status.textContent = character.completed ? "✓ 完了" : "○ 未完了";
+    const expHeading = document.createElement("h3");
+    expHeading.textContent = "EXP";
+    const expList = document.createElement("div");
+    expList.className = "detail-exp-list";
+    expList.append(
+      Object.assign(document.createElement("div"), { textContent: `前日終了時 Lv.${character.previousLevel} / ${getPercentage(character.previousExp).toFixed(2)}%` }),
+      Object.assign(document.createElement("div"), { textContent: `現在 Lv.${character.level}` }),
+    );
+    const afterExists = character.afterDailyExp !== "" && character.afterDailyExp !== null && character.afterDailyExp !== undefined;
+    if (afterExists) {
+      expList.append(Object.assign(document.createElement("div"), { textContent: `日課終了後 ${getPercentage(character.afterDailyExp).toFixed(2)}%` }));
+      const gain = calculateDailyExpGain(character);
+      if (gain !== null) {
+        const gainElement = document.createElement("div");
+        gainElement.className = `detail-exp-gain ${gain < 0 ? "is-negative" : ""}`;
+        gainElement.textContent = `本日の獲得 ${gain === 0 ? "±0.00" : `${gain > 0 ? "+" : ""}${gain.toFixed(2)}`}%`;
+        expList.append(gainElement);
+      }
+    }
     const heading = document.createElement("h3");
     heading.textContent = "デイリー";
-    body.append(status, heading);
+    body.append(status, expHeading, expList, heading);
     if (!character.dailies.length) {
       body.append(Object.assign(document.createElement("p"), { textContent: "クエストがありません", className: "daily-empty" }));
       return;

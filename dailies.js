@@ -95,6 +95,11 @@ export function syncCompleted(character) {
 }
 
 export function resetDailies(character) {
+  if (character.afterDailyExp !== "" && character.afterDailyExp !== null && character.afterDailyExp !== undefined) {
+    character.previousExp = character.afterDailyExp;
+    character.previousLevel = character.level;
+    character.afterDailyExp = "";
+  }
   character.dailies.forEach((daily) => { daily.checked = false; });
   syncCompleted(character);
 }

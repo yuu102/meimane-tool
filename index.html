@@ -1,1 +1,45 @@
-<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>めいまねつーる</title><link rel="stylesheet" href="style.css"></head><body><header class="header"><h1>🍁 めいまねつーる</h1><div class="summary"><div class="summary-card"><span class="title">キャラ</span><span id="characterCount">0</span></div><div class="summary-card"><span class="title">完了</span><span id="completeCount">0</span></div><div class="summary-card"><span class="title">残り</span><span id="remainCount">0</span></div></div><input id="searchBox" type="text" autocomplete="off" placeholder="🔍 キャラ検索"></header><main><section id="characterList" class="card-list"></section></main><button id="addCharacterBtn" class="fab" type="button">＋</button><dialog id="characterDialog"><h2 id="dialogTitle">キャラクター追加</h2><div class="form"><label>キャラ名 *</label><input id="characterName" type="text" maxlength="20"><label>レベル *</label><input id="characterLevel" type="text" inputmode="numeric" maxlength="3"><label>前日終了EXP（任意）</label><input id="characterExp" type="text" inputmode="decimal" autocomplete="off" placeholder="例: 45.67"></div><div class="dialog-buttons"><button id="saveBtn" type="button">保存</button><button id="cancelBtn" type="button">キャンセル</button></div><button id="deleteBtn" class="delete-button" type="button">🗑 キャラ削除</button></dialog><script type="module" src="app.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>めいまねつーる</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .summary-card { font: inherit; color: #fff; cursor: pointer; }
+    .summary-card.is-selected { border-color: #60a5fa; background: #1d4ed8; box-shadow: 0 0 0 2px #93c5fd55; }
+    .summary-card:focus-visible { outline: 3px solid #bfdbfe; outline-offset: 2px; }
+    .daily-exp-gain { margin-top: 6px; color: #bbf7d0; font-size: 13px; font-weight: 800; }
+    .daily-exp-gain.is-negative { color: #fca5a5; }
+    .detail-exp-list { display: grid; gap: 7px; margin-top: 10px; color: #334155; font-size: 14px; }
+    .detail-exp-gain { color: #047857; font-weight: 800; }
+    .detail-exp-gain.is-negative { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>🍁 めいまねつーる</h1>
+    <div class="summary" aria-label="表示フィルター">
+      <button id="summaryAll" class="summary-card" type="button" aria-pressed="true"><span class="title">キャラ</span><span id="characterCount">0</span></button>
+      <button id="summaryCompleted" class="summary-card" type="button" aria-pressed="false"><span class="title">完了</span><span id="completeCount">0</span></button>
+      <button id="summaryRemaining" class="summary-card" type="button" aria-pressed="false"><span class="title">残り</span><span id="remainCount">0</span></button>
+    </div>
+    <input id="searchBox" type="text" autocomplete="off" placeholder="🔍 キャラ検索">
+  </header>
+  <main><section id="characterList" class="card-list"></section></main>
+  <button id="addCharacterBtn" class="fab" type="button">＋</button>
+  <dialog id="characterDialog">
+    <h2 id="dialogTitle">キャラクター追加</h2>
+    <div class="form">
+      <label>キャラ名 *</label><input id="characterName" type="text" maxlength="20">
+      <label>レベル *</label><input id="characterLevel" type="text" inputmode="numeric" maxlength="3">
+      <label>前日終了時レベル（任意）</label><input id="characterPreviousLevel" type="text" inputmode="numeric" maxlength="3">
+      <label>前日終了EXP（任意）</label><input id="characterExp" type="text" inputmode="decimal" autocomplete="off" placeholder="例: 45.67">
+      <label>日課終了後EXP（任意）</label><input id="characterAfterDailyExp" type="text" inputmode="decimal" autocomplete="off" placeholder="例: 51.24">
+    </div>
+    <div class="dialog-buttons"><button id="saveBtn" type="button">保存</button><button id="cancelBtn" type="button">キャンセル</button></div>
+    <button id="deleteBtn" class="delete-button" type="button">🗑 キャラ削除</button>
+  </dialog>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

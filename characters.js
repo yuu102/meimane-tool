@@ -20,7 +20,9 @@ export function normalizeCharacter(record, template = []) {
     job,
     series: seriesForJob(job, record.series || ""),
     level: normalizeLevel(record.level) || "1",
+    previousLevel: normalizeLevel(record.previousLevel) || normalizeLevel(record.level) || "1",
     previousExp: normalizePercentage(record.previousExp ?? record.exp ?? ""),
+    afterDailyExp: normalizePercentage(record.afterDailyExp ?? ""),
     dailies,
     favorite: record.favorite === true,
   };
