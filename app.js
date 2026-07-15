@@ -12,8 +12,6 @@ const STORAGE_KEY = "meimane.characters";
 const LEGACY_STORAGE_KEYS = ["meimane_characters"];
 const MAX_LEVEL = 999;
 const DEFAULT_DAILY_GOAL = 3;
-const EXP_BASE_REQUIREMENT = 100;
-const EXP_PER_LEVEL = 25;
 const DEFAULT_DAILY_TITLES = ["デイリー 1", "デイリー 2", "デイリー 3"];
 const JOB_CATALOG = {
   "戦士": ["ヒーロー", "パラディン", "ダークナイト", "アラン", "ソウルマスター", "デーモンスレイヤー", "デーモンアヴェンジャー", "ブラスター", "カイザー", "ハヤト", "アデル", "エリル"],
@@ -99,11 +97,14 @@ function normalizeLevel(value) {
   return String(Math.min(MAX_LEVEL, Math.max(1, Number(digits))));
 }
 
-/** EXP is optional; only digits and one decimal point are retained. */
+/** Previous EXP is a percentage: clamp it to 0–100 and round to two decimal places. */
 function normalizeExp(value) {
   const cleaned = toHalfWidth(value).replace(/[^0-9.]/g, "");
+  if (!cleaned || cleaned === ".") return "";
+
   const [integer = "", ...decimalParts] = cleaned.split(".");
-  return decimalParts.length ? `${integer}.${decimalParts.join("")}` : integer;
+  const number = Math.min(100, Math.max(0, Number(`${integer}.${decimalParts.join("")}`)));
+  return String(Math.round(number * 100) / 100);
 }
 
 function normalizeNonNegativeInteger(value, fallback = 0) {
@@ -143,7 +144,7 @@ function normalizeDailyItem(item) {
 }
 
 /**
- * Migrate Phase 2's { progress, goal } object to individual quest records.
+ * Migrate the legacy { progress, goal } object to individual quest records.
  * The first `progress` migrated quests are marked complete, preserving totals.
  */
 function migrateLegacyDaily(daily) {
@@ -172,15 +173,9 @@ function normalizeDailies(record) {
   return migrateLegacyDaily(record.daily);
 }
 
-/** EXP needed to reach the next level. Kept in one function for future level-up rules. */
-function getExpGoal(level) {
-  return EXP_BASE_REQUIREMENT + Number(level) * EXP_PER_LEVEL;
-}
-
 function getExpProgress(character) {
-  const current = Math.max(0, Number(character.previousExp) || 0);
-  const goal = getExpGoal(character.level);
-  return { current, goal, percent: Math.min(100, (current / goal) * 100) };
+  const percent = Math.min(100, Math.max(0, Number(character.previousExp) || 0));
+  return { percent };
 }
 
 function isCharacterRecord(value) {
@@ -188,7 +183,7 @@ function isCharacterRecord(value) {
 }
 
 /**
- * Convert any older saved object to the Phase 2 shape.
+ * Convert any older saved object to the current Phase 3.2 shape.
  * Unknown fields are retained to avoid losing future-phase data such as `daily`.
  */
 function normalizeCharacter(record) {
@@ -364,8 +359,8 @@ function renderCard(character) {
   expBar.className = "exp-bar";
   expBar.setAttribute("role", "progressbar");
   expBar.setAttribute("aria-valuemin", "0");
-  expBar.setAttribute("aria-valuemax", String(exp.goal));
-  expBar.setAttribute("aria-valuenow", String(Math.min(exp.current, exp.goal)));
+  expBar.setAttribute("aria-valuemax", "100");
+  expBar.setAttribute("aria-valuenow", String(exp.percent));
   const expFill = document.createElement("div");
   expFill.className = "exp-fill";
   expFill.style.width = `${exp.percent}%`;
@@ -407,15 +402,6 @@ function toggleFavorite(id) {
   if (!character) return;
 
   character.favorite = !character.favorite;
-  saveCharacters();
-  render();
-}
-
-function toggleCompleted(id) {
-  const character = getCharacter(id);
-  if (!character) return;
-
-  character.completed = !character.completed;
   saveCharacters();
   render();
 }
@@ -517,7 +503,7 @@ function readFileAsText(file) {
   });
 }
 
-/** Restore a Phase 1 backup object or a legacy plain character array. */
+/** Restore a current backup object or a legacy plain character array. */
 async function importBackup(file) {
   try {
     const parsed = JSON.parse(await readFileAsText(file));
