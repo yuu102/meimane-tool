@@ -1,5 +1,5 @@
 export function downloadBackup(characters) {
-  const payload = { app: "meimane-tool", version: "3.2", exportedAt: new Date().toISOString(), characters };
+  const payload = { app: "meimane-tool", version: "1.0.0", exportedAt: new Date().toISOString(), characters };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

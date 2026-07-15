@@ -68,7 +68,10 @@ function moveDaily(characterId, dailyId, direction) {
 const daily = createDailyDialog({ find: findCharacter, addDaily, deleteDaily, moveDaily, refresh });
 const detail = createDetailDialog({ find: findCharacter, setDaily, refresh, edit: openEdit, editDailies: (id) => daily.open(id) });
 const settingsDialog = createSettingsDialog(() => settings, (next) => {
-  settings = next;
+  const enabledToday = !settings.autoDailyReset && next.autoDailyReset;
+  settings = enabledToday
+    ? { ...next, lastResetDate: localDateKey() }
+    : next;
   if (sortControl) sortControl.value = settings.sortMode;
   saveSettings(settings); applyAutoReset(); refresh();
 });

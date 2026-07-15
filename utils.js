@@ -1,4 +1,4 @@
-export const MAX_LEVEL = 999;
+export const MAX_LEVEL = 300;
 
 export function createId() {
   return window.crypto?.randomUUID?.()
