@@ -21,6 +21,12 @@ const COMPLETE_LABEL = "✓ 完了";
 const INCOMPLETE_LABEL = "○ 未完了";
 const FAVORITE_ON_LABEL = "★";
 const FAVORITE_OFF_LABEL = "☆";
+const SORT_DEFAULT = "default";
+const SORT_FAVORITE = "favorite";
+const SORT_LEVEL = "level";
+const SORT_NAME = "name";
+const BACKUP_VERSION = "1.2";
+const BACKUP_FILE_PREFIX = "meimane-tool-backup";
 
 const elements = {
   list: $("characterList"),
@@ -41,6 +47,7 @@ const elements = {
 
 let characters = [];
 let editingId = null;
+let sortMode = SORT_DEFAULT;
 
 /** Generate a stable ID so filtering never changes an edit/delete target. */
 function createId() {
@@ -99,6 +106,18 @@ function normalizeCharacter(record) {
   return { ...record, ...identity, ...progress, ...status };
 }
 
+/** Ensure a restored collection never contains duplicate IDs. */
+function normalizeCollection(records) {
+  const usedIds = new Set();
+
+  return records.filter(isCharacterRecord).map((record) => {
+    const character = normalizeCharacter(record);
+    if (usedIds.has(character.id)) character.id = createId();
+    usedIds.add(character.id);
+    return character;
+  });
+}
+
 /** Persist the complete state after every mutation. */
 function saveCharacters() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(characters));
@@ -114,7 +133,7 @@ function loadCharacters() {
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) throw new Error("Stored data is not an array.");
 
-      characters = parsed.filter(isCharacterRecord).map(normalizeCharacter);
+      characters = normalizeCollection(parsed);
       saveCharacters();
       return;
     } catch (error) {
@@ -129,13 +148,30 @@ function getCharacter(id) {
   return characters.find((character) => character.id === id);
 }
 
-function getVisibleCharacters() {
+function getFilteredCharacters() {
   const keyword = elements.search.value.trim().toLocaleLowerCase("ja-JP");
   if (!keyword) return characters;
 
   return characters.filter((character) =>
     character.name.toLocaleLowerCase("ja-JP").includes(keyword),
   );
+}
+
+/** Sort a copy for display only; the saved creation order remains unchanged. */
+function sortCharacters(records) {
+  const sorted = [...records];
+
+  if (sortMode === SORT_FAVORITE) {
+    return sorted.sort((a, b) => Number(b.favorite) - Number(a.favorite));
+  }
+  if (sortMode === SORT_LEVEL) {
+    return sorted.sort((a, b) => Number(b.level) - Number(a.level));
+  }
+  if (sortMode === SORT_NAME) {
+    return sorted.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  }
+
+  return sorted;
 }
 
 /** Render only the three summary values. */
@@ -218,7 +254,7 @@ function renderCard(character) {
 
 /** Render cards and summary from the single source of truth. */
 function render() {
-  const visibleCharacters = getVisibleCharacters();
+  const visibleCharacters = sortCharacters(getFilteredCharacters());
   elements.list.replaceChildren();
 
   if (visibleCharacters.length === 0) {
@@ -246,6 +282,110 @@ function toggleCompleted(id) {
   character.completed = !character.completed;
   saveCharacters();
   render();
+}
+
+/** Add Phase 1.2 controls without changing the existing HTML or CSS files. */
+function createToolControls() {
+  const toolbar = document.createElement("div");
+  toolbar.className = "tool-controls";
+
+  const sortLabel = document.createElement("label");
+  sortLabel.textContent = "並び替え: ";
+
+  const sortSelect = document.createElement("select");
+  sortSelect.setAttribute("aria-label", "並び替え");
+  [
+    [SORT_DEFAULT, "登録順"],
+    [SORT_FAVORITE, "お気に入り順"],
+    [SORT_LEVEL, "Lv順"],
+    [SORT_NAME, "名前順"],
+  ].forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    sortSelect.append(option);
+  });
+  sortSelect.value = sortMode;
+  sortSelect.addEventListener("change", () => {
+    sortMode = sortSelect.value;
+    render();
+  });
+  sortLabel.append(sortSelect);
+
+  const backupButton = document.createElement("button");
+  backupButton.type = "button";
+  backupButton.textContent = "JSONバックアップ";
+  backupButton.addEventListener("click", exportBackup);
+
+  const restoreButton = document.createElement("button");
+  restoreButton.type = "button";
+  restoreButton.textContent = "JSON復元";
+
+  const restoreInput = document.createElement("input");
+  restoreInput.type = "file";
+  restoreInput.accept = "application/json,.json";
+  restoreInput.hidden = true;
+  restoreButton.addEventListener("click", () => restoreInput.click());
+  restoreInput.addEventListener("change", () => {
+    const [file] = restoreInput.files;
+    restoreInput.value = ""; // The same backup can be selected again after an error.
+    if (file) importBackup(file);
+  });
+
+  toolbar.append(sortLabel, backupButton, restoreButton, restoreInput);
+  elements.search.insertAdjacentElement("afterend", toolbar);
+}
+
+/** Download a complete, portable snapshot of the current character data. */
+function exportBackup() {
+  const backup = {
+    app: "meimane-tool",
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    characters,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  link.href = url;
+  link.download = `${BACKUP_FILE_PREFIX}-${timestamp}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("ファイルを読み込めませんでした。"));
+    reader.readAsText(file, "UTF-8");
+  });
+}
+
+/** Restore a Phase 1 backup object or a legacy plain character array. */
+async function importBackup(file) {
+  try {
+    const parsed = JSON.parse(await readFileAsText(file));
+    const records = Array.isArray(parsed) ? parsed : parsed?.characters;
+
+    if (!Array.isArray(records) || !records.every(isCharacterRecord)) {
+      throw new Error("キャラクター一覧を含むJSONではありません。");
+    }
+    if (!window.confirm("現在のキャラクターデータを復元データで置き換えます。よろしいですか？")) {
+      return;
+    }
+
+    characters = normalizeCollection(records);
+    editingId = null;
+    saveCharacters();
+    closeDialog();
+    render();
+    alert(`${characters.length}件のキャラクターデータを復元しました。`);
+  } catch (error) {
+    console.warn("JSON復元に失敗しました。", error);
+    alert("JSON復元に失敗しました。バックアップファイルを確認してください。");
+  }
 }
 
 function resetForm() {
@@ -358,6 +498,7 @@ function bindEvents() {
 
 function init() {
   loadCharacters();
+  createToolControls();
   bindEvents();
   render();
 }
