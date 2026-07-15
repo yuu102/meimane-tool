@@ -39,6 +39,6 @@ export function replaceCharacters(records) {
   });
   saveCharacters();
 }
-export function addCharacter(data) { characters.push({ id: createId(), ...data, dailies: createDefaultDailies(), completed: false, favorite: false }); saveCharacters(); }
+export function addCharacter(data, dailyTemplate) { characters.push({ id: createId(), ...data, dailies: createDefaultDailies(dailyTemplate), completed: false, favorite: false }); saveCharacters(); }
 export function updateCharacter(id, data) { const character = findCharacter(id); if (character) { Object.assign(character, data); saveCharacters(); } return character; }
 export function deleteCharacter(id) { characters = characters.filter((character) => character.id !== id); saveCharacters(); }

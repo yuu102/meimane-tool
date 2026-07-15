@@ -6,8 +6,8 @@ export function createDaily(title, checked = false) {
   return { id: createId(), title, checked: checked === true };
 }
 
-export function createDefaultDailies() {
-  return defaultTitles.map((title) => createDaily(title));
+export function createDefaultDailies(titles = defaultTitles) {
+  return titles.map((title) => createDaily(title));
 }
 
 export function normalizeDailies(record) {

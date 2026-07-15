@@ -2,10 +2,10 @@ import { normalizeLevel, normalizePercentage, localDateKey } from "./utils.js";
 import { seriesForJob } from "./jobs.js";
 import { loadCharacters, getCharacters, findCharacter, saveCharacters, addCharacter, updateCharacter, deleteCharacter, replaceCharacters } from "./characters.js";
 import { createDaily, syncCompleted, resetDailies } from "./dailies.js";
-import { loadSettings, saveSettings } from "./settings.js";
+import { loadSettings, saveSettings, normalizeDailyTemplate } from "./settings.js";
 import { downloadBackup, readBackup } from "./backup.js";
 import { render } from "./render.js";
-import { createCharacterFields, createDailyDialog, createDetailDialog, createSettingsDialog } from "./dialogs.js";
+import { createCharacterFields, createDetailDialog, createSettingsDialog } from "./dialogs.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -64,8 +64,16 @@ function moveDaily(characterId, dailyId, direction) {
   saveCharacters();
 }
 
-const daily = createDailyDialog({ find: findCharacter, addDaily, deleteDaily, moveDaily, refresh });
-const detail = createDetailDialog({ find: findCharacter, setDaily, refresh, edit: openEdit, editDailies: (id) => daily.open(id) });
+function applyDailyTemplate(titles) {
+  getCharacters().forEach((character) => {
+    const checkedByTitle = new Map(character.dailies.map((daily) => [daily.title, daily.checked]));
+    character.dailies = titles.map((title) => createDaily(title, checkedByTitle.get(title) === true));
+    syncCompleted(character);
+  });
+  saveCharacters();
+}
+
+const detail = createDetailDialog({ find: findCharacter, setDaily, refresh, edit: openEdit });
 async function restoreBackup(file) {
   try {
     const records = await readBackup(file);
@@ -80,9 +88,12 @@ async function restoreBackup(file) {
 
 const settingsDialog = createSettingsDialog(() => settings, (next) => {
   const enabledToday = !settings.autoDailyReset && next.autoDailyReset;
+  const dailyTemplate = normalizeDailyTemplate(next.dailyTemplate);
+  const templateChanged = dailyTemplate.join("\u0000") !== settings.dailyTemplate.join("\u0000");
   settings = enabledToday
-    ? { ...next, lastResetDate: localDateKey() }
-    : next;
+    ? { ...next, dailyTemplate, lastResetDate: localDateKey() }
+    : { ...next, dailyTemplate };
+  if (templateChanged) applyDailyTemplate(settings.dailyTemplate);
   saveSettings(settings); applyAutoReset(); refresh();
 }, { onBackup: () => downloadBackup(getCharacters()), onRestore: restoreBackup });
 
@@ -108,7 +119,7 @@ function saveForm() {
   const previousExp = normalizePercentage(elements.exp.value);
   if (!name || !level) return alert("キャラ名とレベルを入力してください。");
   const data = { name, job: elements.job.value, series: seriesForJob(elements.job.value, elements.series.value), level, previousExp };
-  if (editingId) updateCharacter(editingId, data); else addCharacter(data);
+  if (editingId) updateCharacter(editingId, data); else addCharacter(data, settings.dailyTemplate);
   elements.dialog.close(); refresh();
 }
 
@@ -130,7 +141,7 @@ elements.save.addEventListener("click", saveForm);
 elements.cancel.addEventListener("click", () => elements.dialog.close());
 elements.remove.addEventListener("click", removeCharacter);
 elements.level.addEventListener("input", () => { elements.level.value = normalizeLevel(elements.level.value); });
-elements.exp.addEventListener("input", () => { elements.exp.value = normalizePercentage(elements.exp.value); });
+elements.exp.addEventListener("blur", () => { elements.exp.value = normalizePercentage(elements.exp.value); });
 elements.dialog.addEventListener("keydown", (event) => { if (event.key === "Enter" && event.target.tagName !== "BUTTON") { event.preventDefault(); saveForm(); } });
 
 loadCharacters(); applyAutoReset(); createToolbar(); refresh();

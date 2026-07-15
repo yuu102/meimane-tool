@@ -18,26 +18,27 @@ export function createDailyDialog(actions) {
 }
 
 export function createDetailDialog(actions) {
-  const dialog = document.createElement("dialog"); dialog.className = "character-detail-dialog"; dialog.innerHTML = "<h2></h2><div class='character-detail-body'></div><div class='character-detail-actions'><button type='button'>キャラ編集</button><button type='button'>デイリー編集</button><button type='button'>閉じる</button></div>"; document.body.append(dialog);
-  const title = dialog.querySelector("h2"), body = dialog.querySelector(".character-detail-body"), [edit, daily, close] = dialog.querySelectorAll(".character-detail-actions button"); let characterId = null;
+  const dialog = document.createElement("dialog"); dialog.className = "character-detail-dialog"; dialog.innerHTML = "<h2></h2><div class='character-detail-body'></div><div class='character-detail-actions'><button type='button'>キャラ編集</button><button type='button'>閉じる</button></div>"; document.body.append(dialog);
+  const title = dialog.querySelector("h2"), body = dialog.querySelector(".character-detail-body"), [edit, close] = dialog.querySelectorAll(".character-detail-actions button"); let characterId = null;
   const draw = () => { const character = actions.find(characterId); body.replaceChildren(); if (!character) return; title.textContent = `${character.name}の詳細`; const status = document.createElement("p"); status.className = `detail-status ${character.completed ? "is-completed" : ""}`; status.textContent = character.completed ? "✓ 完了" : "○ 未完了"; const h = document.createElement("h3"); h.textContent = "デイリー"; body.append(status, h); if (!character.dailies.length) { body.append(Object.assign(document.createElement("p"), { textContent: "クエストがありません", className: "daily-empty" })); return; } const list = document.createElement("div"); list.className = "detail-daily-list"; character.dailies.forEach((quest) => { const item = document.createElement("label"); item.className = "detail-daily-item"; const check = document.createElement("input"); check.type = "checkbox"; check.checked = quest.checked; check.addEventListener("change", () => { actions.setDaily(characterId, quest.id, check.checked); draw(); actions.refresh(); }); item.append(check, Object.assign(document.createElement("span"), { textContent: quest.title })); list.append(item); }); body.append(list); };
-  close.addEventListener("click", () => dialog.close()); edit.addEventListener("click", () => { dialog.close(); actions.edit(characterId); }); daily.addEventListener("click", () => { dialog.close(); actions.editDailies(characterId); });
+  close.addEventListener("click", () => dialog.close()); edit.addEventListener("click", () => { dialog.close(); actions.edit(characterId); });
   return { open(id) { characterId = id; draw(); dialog.showModal(); }, close: () => dialog.close(), refresh: draw };
 }
 
 export function createSettingsDialog(settings, onSave, actions) {
   const dialog = document.createElement("dialog");
   dialog.className = "settings-dialog";
-  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option></select></label><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
+  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option></select></label><h3>デイリー編集</h3><div class='daily-template'><label>デイリークエスト<input maxlength='40'></label><label>遠征<input maxlength='40'></label><label>ミニダン<input maxlength='40'></label><label>モンカニ<input maxlength='40'></label></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
   document.body.append(dialog);
   const select = dialog.querySelector("select");
   const hide = dialog.querySelector(".hide-completed");
   const reset = dialog.querySelector(".auto-reset");
   const input = dialog.querySelector("input[type=file]");
+  const templateInputs = [...dialog.querySelectorAll(".daily-template input")];
   dialog.querySelector(".backup").addEventListener("click", actions.onBackup);
   dialog.querySelector(".restore").addEventListener("click", () => input.click());
   input.addEventListener("change", () => { if (input.files[0]) actions.onRestore(input.files[0]); input.value = ""; });
-  dialog.querySelector(".save-settings").addEventListener("click", () => { onSave({ ...settings(), sortMode: select.value, autoDailyReset: reset.checked, hideCompleted: hide.checked }); dialog.close(); });
+  dialog.querySelector(".save-settings").addEventListener("click", () => { onSave({ ...settings(), sortMode: select.value, autoDailyReset: reset.checked, hideCompleted: hide.checked, dailyTemplate: templateInputs.map((item) => item.value) }); dialog.close(); });
   dialog.querySelector(".cancel-settings").addEventListener("click", () => dialog.close());
-  return { open() { const value = settings(); select.value = value.sortMode; reset.checked = value.autoDailyReset; hide.checked = value.hideCompleted; dialog.showModal(); } };
+  return { open() { const value = settings(); select.value = value.sortMode; reset.checked = value.autoDailyReset; hide.checked = value.hideCompleted; templateInputs.forEach((input, index) => { input.value = value.dailyTemplate[index] || ""; }); dialog.showModal(); } };
 }
