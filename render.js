@@ -81,16 +81,19 @@ export function renderCard(character, onOpenDetail, onToggleFavorite) {
   name.className = "character-name";
   name.textContent = character.name;
   nameRow.append(name);
+  const levelRow = document.createElement("div");
+  levelRow.className = "character-level-row";
   if (character.job) {
     const job = document.createElement("span");
     job.className = `job-badge ${seriesClass(character.series)}`;
     job.textContent = character.job;
-    nameRow.append(job);
+    levelRow.append(job);
   }
   const level = document.createElement("div");
   level.className = "character-level";
   level.textContent = `Lv.${character.level}`;
-  card.append(header, nameRow, level, renderExpSection(character));
+  levelRow.prepend(level);
+  card.append(header, nameRow, levelRow, renderExpSection(character));
   card.addEventListener("click", () => onOpenDetail(character.id));
   card.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -109,7 +112,7 @@ export function renderExpSection(character) {
   section.className = "exp-section";
   const meta = document.createElement("div");
   meta.className = "exp-meta";
-  meta.innerHTML = `<span>前日終了時 ${percentageText(character.previousExp)}</span>${afterExists ? `<span>日課終了後 ${percentageText(character.afterDailyExp)}</span>` : "<span class='exp-percent'>前日終了時</span>"}`;
+  meta.innerHTML = `<span>前日 ${percentageText(character.previousExp)}</span>${afterExists ? `<span>日課後 ${percentageText(character.afterDailyExp)}</span>` : ""}`;
   const bar = document.createElement("div");
   bar.className = "exp-bar";
   bar.setAttribute("role", "progressbar");

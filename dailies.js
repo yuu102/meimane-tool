@@ -55,6 +55,22 @@ export function normalizeDailies(record, template = []) {
       usedDailyIndexes.add(index);
     }
   });
+
+  // 旧 daily.progress / goal 由来の仮デイリーを、現在のテンプレートへ完全移行する。
+  // チェック状態は並び順で引き継ぎ、テンプレートに追加された項目は未チェックにする。
+  const onlyLegacyPlaceholders = dailies.length > 0
+    && dailies.every((daily) => !daily.templateId && /^デイリー\s*\d+$/.test(daily.title));
+  if (onlyLegacyPlaceholders && template.length) {
+    return template.map((item, index) => {
+      const legacy = dailies[index];
+      return {
+        id: legacy?.id || createId(),
+        templateId: item.id,
+        title: item.title,
+        checked: legacy?.checked === true,
+      };
+    });
+  }
   return dailies;
 }
 
