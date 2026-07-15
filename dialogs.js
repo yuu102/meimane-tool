@@ -2,6 +2,65 @@ import { createId } from "./utils.js";
 import { calculateDailyExpGain, getPercentage } from "./utils.js";
 import { createJobSelect, seriesForJob } from "./jobs.js";
 
+let scrollLockDepth = 0;
+let lockedScrollY = 0;
+let bodyStyleSnapshot = null;
+const openedDialogs = new Set();
+const returnFocusTargets = new WeakMap();
+
+export function lockBodyScroll() {
+  scrollLockDepth += 1;
+  if (scrollLockDepth !== 1) return;
+  lockedScrollY = window.scrollY;
+  bodyStyleSnapshot = { position: document.body.style.position, top: document.body.style.top, width: document.body.style.width };
+  Object.assign(document.body.style, { position: "fixed", top: `-${lockedScrollY}px`, width: "100%" });
+}
+
+export function unlockBodyScroll() {
+  scrollLockDepth = Math.max(0, scrollLockDepth - 1);
+  if (scrollLockDepth !== 0 || !bodyStyleSnapshot) return;
+  Object.assign(document.body.style, bodyStyleSnapshot);
+  bodyStyleSnapshot = null;
+  window.scrollTo(0, lockedScrollY);
+}
+
+export function bindModal(dialog) {
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeModal(dialog); });
+  dialog.addEventListener("close", () => {
+    if (!openedDialogs.delete(dialog)) return;
+    unlockBodyScroll();
+    const target = returnFocusTargets.get(dialog);
+    if (target?.isConnected) target.focus?.({ preventScroll: true });
+  });
+}
+
+export function openModal(dialog, focusTarget = null) {
+  if (dialog.open) return;
+  returnFocusTargets.set(dialog, document.activeElement);
+  openedDialogs.add(dialog);
+  lockBodyScroll();
+  dialog.showModal();
+  if (focusTarget) setTimeout(() => focusTarget.focus?.({ preventScroll: true }), 0);
+}
+
+export function closeModal(dialog, restoreFocus = true) {
+  if (!dialog.open) return;
+  const wasManaged = openedDialogs.delete(dialog);
+  dialog.close();
+  if (wasManaged) {
+    unlockBodyScroll();
+    const target = returnFocusTargets.get(dialog);
+    if (restoreFocus && target?.isConnected) target.focus?.({ preventScroll: true });
+  }
+}
+
+export function switchModal(fromDialog, openNext) {
+  lockBodyScroll();
+  closeModal(fromDialog, false);
+  openNext();
+  unlockBodyScroll();
+}
+
 export function createCharacterFields(elements) {
   const form = elements.name.closest(".form");
   const anchor = elements.level.previousElementSibling;
@@ -28,6 +87,7 @@ export function createDetailDialog(actions) {
   dialog.className = "character-detail-dialog";
   dialog.innerHTML = "<h2></h2><div class='character-detail-body'></div><div class='character-detail-actions'><button type='button'>キャラ編集</button><button type='button'>閉じる</button></div>";
   document.body.append(dialog);
+  bindModal(dialog);
   const title = dialog.querySelector("h2");
   const body = dialog.querySelector(".character-detail-body");
   const [edit, close] = dialog.querySelectorAll(".character-detail-actions button");
@@ -86,9 +146,9 @@ export function createDetailDialog(actions) {
     body.append(list);
   };
 
-  close.addEventListener("click", () => dialog.close());
-  edit.addEventListener("click", () => { dialog.close(); actions.edit(characterId); });
-  return { open(id) { characterId = id; draw(); dialog.showModal(); }, refresh: draw };
+  close.addEventListener("click", () => closeModal(dialog));
+  edit.addEventListener("click", () => switchModal(dialog, () => actions.edit(characterId)));
+  return { open(id) { characterId = id; draw(); openModal(dialog, edit); }, refresh: draw };
 }
 
 export function createSettingsDialog(settings, onSave, actions) {
@@ -96,6 +156,7 @@ export function createSettingsDialog(settings, onSave, actions) {
   dialog.className = "settings-dialog";
   dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option><option value='levelUpSoon'>レベルアップが近い順</option></select></label><button class='character-order' type='button'>キャラクター並び替え</button><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
   document.body.append(dialog);
+  bindModal(dialog);
   const select = dialog.querySelector("select");
   const hide = dialog.querySelector(".hide-completed");
   const reset = dialog.querySelector(".auto-reset");
@@ -175,9 +236,9 @@ export function createSettingsDialog(settings, onSave, actions) {
       return;
     }
     onSave({ ...settings(), sortMode: select.value, autoDailyReset: reset.checked, hideCompleted: hide.checked, dailyTemplate });
-    dialog.close();
+    closeModal(dialog);
   });
-  dialog.querySelector(".cancel-settings").addEventListener("click", () => dialog.close());
+  dialog.querySelector(".cancel-settings").addEventListener("click", () => closeModal(dialog));
   return {
     open() {
       const value = settings();
@@ -187,7 +248,7 @@ export function createSettingsDialog(settings, onSave, actions) {
       draftTemplate = value.dailyTemplate.map((item) => ({ ...item }));
       addInput.value = "";
       drawTemplate();
-      dialog.showModal();
+      openModal(dialog, select);
     },
   };
 }
@@ -198,6 +259,7 @@ export function createCharacterOrderDialog(actions) {
   dialog.className = "character-order-dialog";
   dialog.innerHTML = "<h2>キャラクター並び替え</h2><p>↑↓で順番を変更し、保存で反映します。</p><ol class='character-order-list'></ol><div><button class='save-character-order' type='button'>保存</button><button class='cancel-character-order' type='button'>キャンセル</button></div>";
   document.body.append(dialog);
+  bindModal(dialog);
   const list = dialog.querySelector(".character-order-list");
   let draft = [];
 
@@ -241,14 +303,14 @@ export function createCharacterOrderDialog(actions) {
 
   dialog.querySelector(".save-character-order").addEventListener("click", () => {
     actions.save(draft.map((character) => character.id));
-    dialog.close();
+    closeModal(dialog);
   });
-  dialog.querySelector(".cancel-character-order").addEventListener("click", () => dialog.close());
+  dialog.querySelector(".cancel-character-order").addEventListener("click", () => closeModal(dialog));
   return {
     open() {
       draft = actions.characters().map((character) => ({ id: character.id, name: character.name }));
       draw();
-      dialog.showModal();
+      openModal(dialog, dialog.querySelector(".save-character-order"));
     },
   };
 }

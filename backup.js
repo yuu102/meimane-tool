@@ -5,7 +5,7 @@ function validateCharacters(records) {
 export function downloadBackup(characters, settings) {
   const payload = {
     app: "meimane-tool",
-    version: "1.3.0",
+    version: "1.3.1",
     exportedAt: new Date().toISOString(),
     characters,
     settings,

@@ -15,7 +15,7 @@ import { applyTemplateToCharacter, resetDailies, syncCompleted } from "./dailies
 import { loadSettings, normalizeDailyTemplate, normalizeSettings, saveSettings } from "./settings.js";
 import { downloadBackup, readBackup } from "./backup.js";
 import { render } from "./render.js";
-import { createCharacterFields, createCharacterOrderDialog, createDetailDialog, createSettingsDialog } from "./dialogs.js";
+import { bindModal, closeModal, createCharacterFields, createCharacterOrderDialog, createDetailDialog, createSettingsDialog, openModal } from "./dialogs.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -198,8 +198,7 @@ function openAdd() {
   elements.exp.value = "";
   elements.afterDailyExp.value = "";
   elements.remove.hidden = true;
-  elements.dialog.showModal();
-  elements.name.focus();
+  openModal(elements.dialog, elements.name);
 }
 
 function openEdit(id) {
@@ -218,7 +217,7 @@ function openEdit(id) {
   elements.exp.value = character.previousExp;
   elements.afterDailyExp.value = character.afterDailyExp;
   elements.remove.hidden = false;
-  elements.dialog.showModal();
+  openModal(elements.dialog, elements.name);
 }
 
 function saveForm() {
@@ -242,7 +241,7 @@ function saveForm() {
   };
   if (editingId) updateCharacter(editingId, data);
   else addCharacter(data, settings.dailyTemplate);
-  elements.dialog.close();
+  closeModal(elements.dialog);
   refresh();
 }
 
@@ -250,7 +249,7 @@ function removeCharacter() {
   const character = findCharacter(editingId);
   if (!character || !confirm(`「${character.name}」を削除しますか？`)) return;
   deleteCharacter(editingId);
-  elements.dialog.close();
+  closeModal(elements.dialog);
   refresh();
 }
 
@@ -268,7 +267,7 @@ function createToolbar() {
 elements.add.addEventListener("click", openAdd);
 elements.search.addEventListener("input", refresh);
 elements.save.addEventListener("click", saveForm);
-elements.cancel.addEventListener("click", () => elements.dialog.close());
+elements.cancel.addEventListener("click", () => closeModal(elements.dialog));
 elements.remove.addEventListener("click", removeCharacter);
 elements.reorderSave.addEventListener("click", () => finishCardReorder(true));
 elements.reorderCancel.addEventListener("click", () => finishCardReorder(false));
@@ -276,6 +275,7 @@ elements.level.addEventListener("input", () => { elements.level.value = normaliz
 elements.previousLevel.addEventListener("input", () => { elements.previousLevel.value = normalizeLevel(elements.previousLevel.value); });
 elements.exp.addEventListener("blur", () => { elements.exp.value = normalizePercentage(elements.exp.value); });
 elements.afterDailyExp.addEventListener("blur", () => { elements.afterDailyExp.value = normalizePercentage(elements.afterDailyExp.value); });
+bindModal(elements.dialog);
 elements.dialog.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.target.tagName !== "BUTTON") {
     event.preventDefault();

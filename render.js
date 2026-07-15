@@ -113,19 +113,42 @@ export function renderCard(character, actions) {
   let timer = null;
   let startPoint = null;
   let longPressed = false;
-  const clearPress = () => { if (timer) clearTimeout(timer); timer = null; };
-  card.addEventListener("pointerdown", (event) => {
-    if (reorderMode || event.target.closest(".favorite-toggle")) return;
-    startPoint = { x: event.clientX, y: event.clientY };
+  const clearPress = () => { if (timer) clearTimeout(timer); timer = null; startPoint = null; };
+  const startPress = (point, target) => {
+    if (reorderMode || target.closest?.(".favorite-toggle")) return;
+    startPoint = point;
     longPressed = false;
-    timer = setTimeout(() => { timer = null; longPressed = true; onLongPress(character.id); }, 600);
-  });
-  card.addEventListener("pointermove", (event) => {
-    if (!startPoint) return;
-    if (Math.hypot(event.clientX - startPoint.x, event.clientY - startPoint.y) > 12) clearPress();
-  });
-  card.addEventListener("pointerup", clearPress);
-  card.addEventListener("pointercancel", clearPress);
+    timer = setTimeout(() => {
+      timer = null;
+      longPressed = true;
+      window.getSelection?.().removeAllRanges();
+      navigator.vibrate?.(12);
+      onLongPress(character.id);
+    }, 600);
+  };
+  const movePress = (point) => {
+    if (startPoint && Math.hypot(point.x - startPoint.x, point.y - startPoint.y) > 12) clearPress();
+  };
+  const usesTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  if (usesTouch) {
+    card.addEventListener("touchstart", (event) => {
+      const touch = event.touches[0];
+      if (touch) startPress({ x: touch.clientX, y: touch.clientY }, event.target);
+    }, { passive: true });
+    card.addEventListener("touchmove", (event) => {
+      const touch = event.touches[0];
+      if (touch) movePress({ x: touch.clientX, y: touch.clientY });
+    }, { passive: true });
+    card.addEventListener("touchend", clearPress, { passive: true });
+    card.addEventListener("touchcancel", clearPress, { passive: true });
+  } else {
+    card.addEventListener("pointerdown", (event) => startPress({ x: event.clientX, y: event.clientY }, event.target));
+    card.addEventListener("pointermove", (event) => movePress({ x: event.clientX, y: event.clientY }));
+    card.addEventListener("pointerup", clearPress);
+    card.addEventListener("pointercancel", clearPress);
+  }
+  card.addEventListener("selectstart", (event) => event.preventDefault());
+  card.addEventListener("contextmenu", (event) => event.preventDefault());
   card.addEventListener("click", (event) => {
     if (reorderMode || longPressed) { event.preventDefault(); return; }
     onOpenDetail(character.id);
