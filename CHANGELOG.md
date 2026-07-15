@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 3.2 — モジュール化・設定・日次リセット
+
+- `app.js` を責務別のES Modulesへ分割し、`index.html` を `type="module"` に変更。
+- `meimane.settings` を追加。並び替え方法、デイリー自動リセット、最終リセット日を保存。
+- 設定ダイアログと「設定」ボタンを追加。
+- 日付が変わった最初の起動時にデイリーを自動リセットする機能を追加。
+- 未使用の旧daily-progress系CSSと旧単一ファイル実装を整理。
+
 ## Phase 3.2
 
 - `previousExp` を実数EXPではなく、前日終了時のEXP割合（0〜100%、小数第2位）として正規化。
