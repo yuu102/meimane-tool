@@ -94,7 +94,7 @@ export function createDetailDialog(actions) {
 export function createSettingsDialog(settings, onSave, actions) {
   const dialog = document.createElement("dialog");
   dialog.className = "settings-dialog";
-  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option></select></label><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
+  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option></select></label><button class='character-order' type='button'>キャラクター並び替え</button><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
   document.body.append(dialog);
   const select = dialog.querySelector("select");
   const hide = dialog.querySelector(".hide-completed");
@@ -165,6 +165,7 @@ export function createSettingsDialog(settings, onSave, actions) {
     if (event.key === "Enter") { event.preventDefault(); addTemplate(); }
   });
   dialog.querySelector(".backup").addEventListener("click", actions.onBackup);
+  dialog.querySelector(".character-order").addEventListener("click", actions.onOpenCharacterOrder);
   dialog.querySelector(".restore").addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => { if (fileInput.files[0]) actions.onRestore(fileInput.files[0]); fileInput.value = ""; });
   dialog.querySelector(".save-settings").addEventListener("click", () => {
@@ -186,6 +187,67 @@ export function createSettingsDialog(settings, onSave, actions) {
       draftTemplate = value.dailyTemplate.map((item) => ({ ...item }));
       addInput.value = "";
       drawTemplate();
+      dialog.showModal();
+    },
+  };
+}
+
+/** iPhoneでも確実に操作できる、↑↓ボタン式のキャラクター並び替え画面。 */
+export function createCharacterOrderDialog(actions) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "character-order-dialog";
+  dialog.innerHTML = "<h2>キャラクター並び替え</h2><p>↑↓で順番を変更し、保存で反映します。</p><ol class='character-order-list'></ol><div><button class='save-character-order' type='button'>保存</button><button class='cancel-character-order' type='button'>キャンセル</button></div>";
+  document.body.append(dialog);
+  const list = dialog.querySelector(".character-order-list");
+  let draft = [];
+
+  const draw = () => {
+    list.replaceChildren();
+    draft.forEach((character, index) => {
+      const row = document.createElement("li");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "8px";
+      row.style.padding = "10px";
+      const name = document.createElement("span");
+      name.textContent = character.name;
+      name.style.flex = "1";
+      name.style.minWidth = "0";
+      name.style.overflow = "hidden";
+      name.style.textOverflow = "ellipsis";
+      name.style.whiteSpace = "nowrap";
+      const controls = document.createElement("span");
+      controls.style.display = "flex";
+      controls.style.gap = "7px";
+      [["↑", -1, "上へ移動"], ["↓", 1, "下へ移動"]].forEach(([text, direction, label]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = text;
+        button.setAttribute("aria-label", `${character.name}を${label}`);
+        button.disabled = direction < 0 ? index === 0 : index === draft.length - 1;
+        button.style.minWidth = "44px";
+        button.style.minHeight = "44px";
+        button.addEventListener("click", () => {
+          const target = index + direction;
+          [draft[index], draft[target]] = [draft[target], draft[index]];
+          draw();
+        });
+        controls.append(button);
+      });
+      row.append(name, controls);
+      list.append(row);
+    });
+  };
+
+  dialog.querySelector(".save-character-order").addEventListener("click", () => {
+    actions.save(draft.map((character) => character.id));
+    dialog.close();
+  });
+  dialog.querySelector(".cancel-character-order").addEventListener("click", () => dialog.close());
+  return {
+    open() {
+      draft = actions.characters().map((character) => ({ id: character.id, name: character.name }));
+      draw();
       dialog.showModal();
     },
   };

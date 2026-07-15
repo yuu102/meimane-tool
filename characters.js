@@ -30,36 +30,48 @@ export function normalizeCharacter(record, template = []) {
   return character;
 }
 
+/** orderなし・重複・不正値を、現在の並びを保ちながら0始まりの連番へ直す。 */
+function normalizeCharacterOrder(records) {
+  const orders = records.map((character) => character.order);
+  const valid = orders.every((order) => Number.isInteger(order) && order >= 0)
+    && new Set(orders).size === orders.length;
+  const ordered = valid ? [...records].sort((a, b) => a.order - b.order) : records;
+  return ordered.map((character, index) => ({ ...character, order: index }));
+}
+
+function assignSequentialOrder(records) {
+  return records.map((character, index) => ({ ...character, order: index }));
+}
+
+function setRecords(records, template) {
+  const used = new Set();
+  const normalized = records.filter((item) => item && typeof item.name === "string").map((item) => {
+    const character = normalizeCharacter(item, template);
+    if (used.has(character.id)) character.id = createId();
+    used.add(character.id);
+    return character;
+  });
+  characters = normalizeCharacterOrder(normalized);
+  saveCharacters();
+  return characters;
+}
+
 export function loadCharacters(template = []) {
   for (const key of [CHARACTER_STORAGE_KEY, ...LEGACY_CHARACTER_KEYS]) {
     const parsed = readJson(key);
-    if (!Array.isArray(parsed)) continue;
-    const used = new Set();
-    characters = parsed.filter((item) => item && typeof item.name === "string").map((item) => {
-      const character = normalizeCharacter(item, template);
-      if (used.has(character.id)) character.id = createId();
-      used.add(character.id);
-      return character;
-    });
-    saveCharacters();
-    return characters;
+    if (Array.isArray(parsed)) return setRecords(parsed, template);
   }
   characters = [];
   return characters;
 }
 
 export function replaceCharacters(records, template = []) {
-  const used = new Set();
-  characters = records.map((record) => normalizeCharacter(record, template)).map((character) => {
-    if (used.has(character.id)) character.id = createId();
-    used.add(character.id);
-    return character;
-  });
-  saveCharacters();
+  return setRecords(records, template);
 }
 
 export function addCharacter(data, dailyTemplate) {
-  const character = { id: createId(), ...data, dailies: createDefaultDailies(dailyTemplate), favorite: false };
+  const maxOrder = characters.reduce((max, character) => Math.max(max, Number(character.order) || 0), -1);
+  const character = { id: createId(), ...data, order: maxOrder + 1, dailies: createDefaultDailies(dailyTemplate), favorite: false };
   syncCompleted(character);
   characters.push(character);
   saveCharacters();
@@ -75,6 +87,15 @@ export function updateCharacter(id, data) {
 }
 
 export function deleteCharacter(id) {
-  characters = characters.filter((character) => character.id !== id);
+  characters = assignSequentialOrder(characters.filter((character) => character.id !== id));
+  saveCharacters();
+}
+
+/** 指定IDの並びを保存し、orderを0から振り直す。 */
+export function saveCharacterOrder(ids) {
+  const byId = new Map(characters.map((character) => [character.id, character]));
+  const requested = ids.map((id) => byId.get(id)).filter(Boolean);
+  const missing = characters.filter((character) => !ids.includes(character.id));
+  characters = assignSequentialOrder([...requested, ...missing]);
   saveCharacters();
 }

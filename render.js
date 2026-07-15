@@ -19,7 +19,7 @@ export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all
   if (sortMode === "favorite") return [...visible].sort((a, b) => Number(b.favorite) - Number(a.favorite));
   if (sortMode === "level") return [...visible].sort((a, b) => Number(b.level) - Number(a.level));
   if (sortMode === "name") return [...visible].sort((a, b) => a.name.localeCompare(b.name, "ja"));
-  return visible;
+  return [...visible].sort((a, b) => a.order - b.order);
 }
 
 export function render({ list, counts, characters, keyword, sortMode, viewMode, onOpenDetail, onToggleFavorite, onChangeViewMode }) {

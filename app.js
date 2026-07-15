@@ -7,6 +7,7 @@ import {
   getCharacters,
   loadCharacters,
   replaceCharacters,
+  saveCharacterOrder,
   saveCharacters,
   updateCharacter,
 } from "./characters.js";
@@ -14,7 +15,7 @@ import { applyTemplateToCharacter, resetDailies, syncCompleted } from "./dailies
 import { loadSettings, normalizeDailyTemplate, normalizeSettings, saveSettings } from "./settings.js";
 import { downloadBackup, readBackup } from "./backup.js";
 import { render } from "./render.js";
-import { createCharacterFields, createDetailDialog, createSettingsDialog } from "./dialogs.js";
+import { createCharacterFields, createCharacterOrderDialog, createDetailDialog, createSettingsDialog } from "./dialogs.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -86,6 +87,13 @@ function applyDailyTemplate(previousTemplate, nextTemplate) {
 }
 
 const detail = createDetailDialog({ find: findCharacter, setDaily, refresh, edit: openEdit });
+const characterOrderDialog = createCharacterOrderDialog({
+  characters: () => [...getCharacters()].sort((a, b) => a.order - b.order),
+  save: (ids) => {
+    saveCharacterOrder(ids);
+    refresh();
+  },
+});
 
 async function restoreBackup(file) {
   try {
@@ -117,6 +125,7 @@ const settingsDialog = createSettingsDialog(
   {
     onBackup: () => downloadBackup(getCharacters(), settings),
     onRestore: restoreBackup,
+    onOpenCharacterOrder: () => characterOrderDialog.open(),
   },
 );
 
@@ -214,7 +223,7 @@ elements.dialog.addEventListener("keydown", (event) => {
   }
 });
 
-// Version 1.0.3: 設定を先に読み込み、旧キャラクターデータへtemplateIdを補完する。
+// Version 1.2.0: 設定を先に読み込み、旧キャラクターデータへtemplateIdとorderを補完する。
 saveSettings(settings);
 loadCharacters(settings.dailyTemplate);
 applyAutoReset();

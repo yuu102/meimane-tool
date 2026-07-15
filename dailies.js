@@ -57,19 +57,28 @@ export function normalizeDailies(record, template = []) {
   });
 
   // 旧 daily.progress / goal 由来の仮デイリーを、現在のテンプレートへ完全移行する。
-  // チェック状態は並び順で引き継ぎ、テンプレートに追加された項目は未チェックにする。
-  const onlyLegacyPlaceholders = dailies.length > 0
-    && dailies.every((daily) => !daily.templateId && /^デイリー\s*\d+$/.test(daily.title));
-  if (onlyLegacyPlaceholders && template.length) {
-    return template.map((item, index) => {
-      const legacy = dailies[index];
-      return {
-        id: legacy?.id || createId(),
-        templateId: item.id,
-        title: item.title,
-        checked: legacy?.checked === true,
-      };
+  // 独自デイリーが混在していても残し、仮デイリーだけをテンプレート順で置換する。
+  const legacyIndexes = dailies
+    .map((daily, index) => (!daily.templateId && /^デイリー\s*\d+$/.test(daily.title) ? index : -1))
+    .filter((index) => index >= 0);
+  if (legacyIndexes.length && template.length) {
+    const usedTemplateIds = new Set(dailies.map((daily) => daily.templateId).filter((id) => template.some((item) => item.id === id)));
+    const removeIndexes = new Set();
+    legacyIndexes.forEach((index) => {
+      const nextTemplate = template.find((item) => !usedTemplateIds.has(item.id));
+      if (!nextTemplate) {
+        removeIndexes.add(index);
+        return;
+      }
+      dailies[index].templateId = nextTemplate.id;
+      dailies[index].title = nextTemplate.title;
+      usedTemplateIds.add(nextTemplate.id);
     });
+    const retained = dailies.filter((_, index) => !removeIndexes.has(index));
+    const byTemplateId = new Map(retained.filter((daily) => daily.templateId).map((daily) => [daily.templateId, daily]));
+    const templateDailies = template.map((item) => byTemplateId.get(item.id) || createDaily(item));
+    const customDailies = retained.filter((daily) => !template.some((item) => item.id === daily.templateId));
+    return [...templateDailies, ...customDailies];
   }
   return dailies;
 }
