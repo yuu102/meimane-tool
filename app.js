@@ -1,7 +1,7 @@
 "use strict";
 
 /*
- * めいまねつーる Phase 3
+ * めいまねつーる Phase 3.1
  * キャラクターの追加・編集・削除・検索、完了・お気に入り状態を LocalStorage に保存します。
  */
 
@@ -15,6 +15,14 @@ const DEFAULT_DAILY_GOAL = 3;
 const EXP_BASE_REQUIREMENT = 100;
 const EXP_PER_LEVEL = 25;
 const DEFAULT_DAILY_TITLES = ["デイリー 1", "デイリー 2", "デイリー 3"];
+const JOB_SERIES = ["", "戦士", "魔法使い", "盗賊", "弓使い", "海賊"];
+const SERIES_CLASS_NAMES = {
+  "戦士": "series-warrior",
+  "魔法使い": "series-mage",
+  "盗賊": "series-thief",
+  "弓使い": "series-archer",
+  "海賊": "series-pirate",
+};
 
 // UI text is kept together so it is easy to change without touching rendering logic.
 const EMPTY_MESSAGE = "キャラクターがいません";
@@ -29,7 +37,7 @@ const SORT_DEFAULT = "default";
 const SORT_FAVORITE = "favorite";
 const SORT_LEVEL = "level";
 const SORT_NAME = "name";
-const BACKUP_VERSION = "2.0";
+const BACKUP_VERSION = "3.1";
 const BACKUP_FILE_PREFIX = "meimane-tool-backup";
 
 const elements = {
@@ -53,6 +61,7 @@ let characters = [];
 let editingId = null;
 let sortMode = SORT_DEFAULT;
 let dailyEditingId = null;
+let detailViewingId = null;
 
 /** Generate a stable ID so filtering never changes an edit/delete target. */
 function createId() {
@@ -162,6 +171,7 @@ function normalizeCharacter(record) {
     id: typeof record.id === "string" && record.id ? record.id : createId(),
     name: record.name.trim(),
     job: typeof record.job === "string" ? record.job.trim().slice(0, 20) : "",
+    series: JOB_SERIES.includes(record.series) ? record.series : "",
   };
   const progress = {
     level: normalizeLevel(record.level) || "1",
@@ -273,7 +283,7 @@ function createControl(className, label, title, onClick) {
   return control;
 }
 
-/** Render one card and bind all controls by UUID, never by filtered array index. */
+/** Cards are a summary only; daily checkboxes live in the separate details dialog. */
 function renderCard(character) {
   const card = document.createElement("div");
   card.className = "character-card";
@@ -282,15 +292,17 @@ function renderCard(character) {
   card.dataset.id = character.id;
   card.tabIndex = 0;
   card.setAttribute("role", "button");
-  card.setAttribute("aria-label", `${character.name}を編集`);
+  card.setAttribute("aria-label", `${character.name}の詳細を開く`);
 
   const header = document.createElement("div");
   header.className = "card-header";
+  const status = document.createElement("span");
+  status.className = "completion-status";
+  status.textContent = character.completed ? COMPLETE_LABEL : INCOMPLETE_LABEL;
   header.append(
     createControl("favorite-toggle", character.favorite ? FAVORITE_ON_LABEL : FAVORITE_OFF_LABEL,
       character.favorite ? "お気に入りを解除" : "お気に入りに追加", () => toggleFavorite(character.id)),
-    createControl("completed-toggle", character.completed ? COMPLETE_LABEL : INCOMPLETE_LABEL,
-      character.completed ? "未完了に戻す" : "完了にする", () => toggleCompleted(character.id)),
+    status,
   );
 
   const nameRow = document.createElement("div");
@@ -302,6 +314,7 @@ function renderCard(character) {
   if (character.job) {
     const job = document.createElement("span");
     job.className = "job-badge";
+    job.classList.add(SERIES_CLASS_NAMES[character.series] || "series-default");
     job.textContent = character.job;
     nameRow.append(job);
   }
@@ -319,7 +332,7 @@ function renderCard(character) {
   expValues.textContent = `EXP ${exp.current} / ${exp.goal}`;
   const expPercent = document.createElement("span");
   expPercent.className = "exp-percent";
-  expPercent.textContent = `${Math.round(exp.percent)}%`;
+  expPercent.textContent = `${exp.percent.toFixed(2)}%`;
   expMeta.append(expValues, expPercent);
   const expBar = document.createElement("div");
   expBar.className = "exp-bar";
@@ -333,50 +346,15 @@ function renderCard(character) {
   expBar.append(expFill);
   const nextLevel = document.createElement("div");
   nextLevel.className = "next-level";
-  nextLevel.textContent = character.level === String(MAX_LEVEL)
-    ? "MAX LEVEL"
-    : `次のレベルまで ${Math.max(0, exp.goal - exp.current)} EXP`;
+  nextLevel.textContent = character.level === String(MAX_LEVEL) ? "MAX LEVEL" : `次のレベル進捗 ${exp.percent.toFixed(2)}%`;
   expSection.append(expMeta, expBar, nextLevel);
 
-  const daily = document.createElement("div");
-  daily.className = "daily-quest-list";
-  daily.addEventListener("click", (event) => event.stopPropagation());
-  const dailyHeader = document.createElement("div");
-  dailyHeader.className = "daily-quest-header";
-  const dailyTitle = document.createElement("span");
-  dailyTitle.textContent = "デイリー";
-  dailyHeader.append(
-    dailyTitle,
-    createControl("daily-edit-button", "デイリー編集", "デイリー編集を開く", () => openDailyDialog(character.id)),
-  );
-  daily.append(dailyHeader);
-  if (character.dailies.length === 0) {
-    const emptyDaily = document.createElement("p");
-    emptyDaily.className = "daily-empty";
-    emptyDaily.textContent = "クエストがありません";
-    daily.append(emptyDaily);
-  } else {
-    character.dailies.forEach((quest) => {
-      const item = document.createElement("label");
-      item.className = "daily-quest";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = quest.checked;
-      checkbox.addEventListener("click", (event) => event.stopPropagation());
-      checkbox.addEventListener("change", () => setDailyChecked(character.id, quest.id, checkbox.checked));
-      const text = document.createElement("span");
-      text.textContent = quest.title;
-      item.append(checkbox, text);
-      daily.append(item);
-    });
-  }
-
-  card.append(header, nameRow, level, expSection, daily);
-  card.addEventListener("click", () => openEditDialog(character.id));
+  card.append(header, nameRow, level, expSection);
+  card.addEventListener("click", () => openDetailDialog(character.id));
   card.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      openEditDialog(character.id);
+      openDetailDialog(character.id);
     }
   });
   return card;
@@ -421,8 +399,15 @@ function setDailyChecked(characterId, dailyId, checked) {
   if (!daily) return;
 
   daily.checked = checked;
+  syncCompletedFromDailies(character);
   saveCharacters();
+  renderDetailDialog();
   render();
+}
+
+/** A character is complete exactly when at least one daily quest is all checked. */
+function syncCompletedFromDailies(character) {
+  character.completed = character.dailies.length > 0 && character.dailies.every((daily) => daily.checked);
 }
 
 /** Add sorting and backup controls without changing the existing HTML file. */
@@ -522,6 +507,7 @@ async function importBackup(file) {
     saveCharacters();
     closeDialog();
     closeDailyDialog();
+    closeDetailDialog();
     render();
     alert(`${characters.length}件のキャラクターデータを復元しました。`);
   } catch (error) {
@@ -545,7 +531,21 @@ function createCharacterFormExtensions() {
   jobInput.placeholder = "例: 戦士";
   form.insertBefore(jobLabel, levelLabel);
   form.insertBefore(jobInput, levelLabel);
+  const seriesLabel = document.createElement("label");
+  seriesLabel.htmlFor = "characterSeries";
+  seriesLabel.textContent = "系列";
+  const seriesSelect = document.createElement("select");
+  seriesSelect.id = "characterSeries";
+  JOB_SERIES.forEach((series) => {
+    const option = document.createElement("option");
+    option.value = series;
+    option.textContent = series || "選択しない";
+    seriesSelect.append(option);
+  });
+  form.insertBefore(seriesLabel, levelLabel);
+  form.insertBefore(seriesSelect, levelLabel);
   elements.job = jobInput;
+  elements.series = seriesSelect;
 }
 
 const dailyEditor = {};
@@ -638,6 +638,7 @@ function addDaily() {
   }
 
   character.dailies.push(createDaily(title));
+  syncCompletedFromDailies(character);
   dailyEditor.input.value = "";
   saveCharacters();
   renderDailyEditor();
@@ -650,6 +651,7 @@ function deleteDaily(dailyId) {
   if (!character) return;
 
   character.dailies = character.dailies.filter((daily) => daily.id !== dailyId);
+  syncCompletedFromDailies(character);
   saveCharacters();
   renderDailyEditor();
   render();
@@ -669,11 +671,103 @@ function moveDaily(dailyId, direction) {
   render();
 }
 
+const detailViewer = {};
+
+/** The card opens this details dialog; daily checkboxes are intentionally kept here. */
+function createDetailViewer() {
+  const dialog = document.createElement("dialog");
+  dialog.id = "characterDetailDialog";
+  dialog.className = "character-detail-dialog";
+  const title = document.createElement("h2");
+  const body = document.createElement("div");
+  body.className = "character-detail-body";
+  const actions = document.createElement("div");
+  actions.className = "character-detail-actions";
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.textContent = "キャラ編集";
+  const dailyButton = document.createElement("button");
+  dailyButton.type = "button";
+  dailyButton.textContent = "デイリー編集";
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.textContent = "閉じる";
+  actions.append(editButton, dailyButton, closeButton);
+  dialog.append(title, body, actions);
+  document.body.append(dialog);
+  Object.assign(detailViewer, { dialog, title, body, editButton, dailyButton, closeButton });
+
+  closeButton.addEventListener("click", closeDetailDialog);
+  editButton.addEventListener("click", () => {
+    const id = detailViewingId;
+    closeDetailDialog();
+    if (id) openEditDialog(id);
+  });
+  dailyButton.addEventListener("click", () => {
+    const id = detailViewingId;
+    closeDetailDialog();
+    if (id) openDailyDialog(id);
+  });
+}
+
+function openDetailDialog(id) {
+  if (!getCharacter(id)) return;
+  detailViewingId = id;
+  renderDetailDialog();
+  detailViewer.dialog.showModal();
+}
+
+function closeDetailDialog() {
+  if (detailViewer.dialog?.open) detailViewer.dialog.close();
+  detailViewingId = null;
+}
+
+function renderDetailDialog() {
+  if (!detailViewer.body) return;
+  const character = getCharacter(detailViewingId);
+  detailViewer.body.replaceChildren();
+  if (!character) return;
+
+  detailViewer.title.textContent = `${character.name}の詳細`;
+  const status = document.createElement("p");
+  status.className = `detail-status ${character.completed ? "is-completed" : ""}`;
+  status.textContent = character.completed ? COMPLETE_LABEL : INCOMPLETE_LABEL;
+  detailViewer.body.append(status);
+
+  const dailyTitle = document.createElement("h3");
+  dailyTitle.textContent = "デイリー";
+  detailViewer.body.append(dailyTitle);
+  if (character.dailies.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "daily-empty";
+    empty.textContent = "クエストがありません";
+    detailViewer.body.append(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "detail-daily-list";
+  character.dailies.forEach((daily) => {
+    const item = document.createElement("label");
+    item.className = "detail-daily-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = daily.checked;
+    checkbox.addEventListener("change", () => setDailyChecked(character.id, daily.id, checkbox.checked));
+    const text = document.createElement("span");
+    text.textContent = daily.title;
+    item.append(checkbox, text);
+    list.append(item);
+  });
+  detailViewer.body.append(list);
+}
+
 function resetForm() {
   editingId = null;
   elements.dialogTitle.textContent = ADD_DIALOG_TITLE;
   elements.name.value = "";
   elements.job.value = "";
+  elements.series.value = "";
   elements.level.value = "";
   elements.exp.value = "";
   elements.deleteButton.hidden = true;
@@ -693,6 +787,7 @@ function openEditDialog(id) {
   elements.dialogTitle.textContent = EDIT_DIALOG_TITLE;
   elements.name.value = character.name;
   elements.job.value = character.job;
+  elements.series.value = character.series;
   elements.level.value = character.level;
   elements.exp.value = character.previousExp;
   elements.deleteButton.hidden = false;
@@ -708,6 +803,7 @@ function readForm() {
   return {
     name: elements.name.value.trim(),
     job: elements.job.value.trim(),
+    series: elements.series.value,
     level: normalizeLevel(elements.level.value),
     previousExp: normalizeExp(elements.exp.value),
   };
@@ -784,6 +880,7 @@ function init() {
   loadCharacters();
   createCharacterFormExtensions();
   createDailyEditor();
+  createDetailViewer();
   createToolControls();
   bindEvents();
   render();
