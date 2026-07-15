@@ -32,7 +32,12 @@ const elements = {
   save: $("saveBtn"),
   cancel: $("cancelBtn"),
   remove: $("deleteBtn"),
+  reorderBar: $("reorderBar"),
+  reorderSave: $("saveReorderBtn"),
+  reorderCancel: $("cancelReorderBtn"),
+  reorderNotice: $("reorderNotice"),
   counts: { all: $("summaryAll"), completed: $("summaryCompleted"), remaining: $("summaryRemaining") },
+  progress: { count: $("dailyProgressCount"), percent: $("dailyProgressPercent"), bar: $("dailyProgressBar"), fill: $("dailyProgressFill") },
 };
 const fields = createCharacterFields(elements);
 elements.job = fields.job;
@@ -40,19 +45,72 @@ elements.series = fields.series;
 let editingId = null;
 let settings = loadSettings();
 let viewMode = settings.hideCompleted ? "remaining" : "all";
+let reorderMode = false;
+let draftOrderIds = [];
+let noticeTimer = null;
+
+function charactersForRender() {
+  if (!reorderMode) return getCharacters();
+  const byId = new Map(getCharacters().map((character) => [character.id, character]));
+  return draftOrderIds.map((id, index) => ({ ...byId.get(id), order: index })).filter((character) => character.id);
+}
 
 function refresh() {
   render({
     list: elements.list,
     counts: elements.counts,
-    characters: getCharacters(),
+    progress: elements.progress,
+    characters: charactersForRender(),
     keyword: elements.search.value,
     sortMode: settings.sortMode,
     viewMode,
+    reorderMode,
     onOpenDetail: (id) => detail.open(id),
     onToggleFavorite: toggleFavorite,
-    onChangeViewMode: (mode) => { viewMode = mode; refresh(); },
+    onChangeViewMode: (mode) => { if (!reorderMode) { viewMode = mode; refresh(); } },
+    onLongPress: beginCardReorder,
+    onMoveReorder: moveDraftCharacter,
   });
+}
+
+function canStartCardReorder() {
+  return viewMode === "all" && settings.sortMode === "default" && !elements.search.value.trim();
+}
+
+function showReorderNotice(message) {
+  elements.reorderNotice.textContent = message;
+  elements.reorderNotice.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { elements.reorderNotice.hidden = true; }, 2500);
+}
+
+function beginCardReorder() {
+  if (!canStartCardReorder()) {
+    showReorderNotice("全キャラ・登録順表示で並び替えできます");
+    return;
+  }
+  reorderMode = true;
+  draftOrderIds = [...getCharacters()].sort((a, b) => a.order - b.order).map((character) => character.id);
+  elements.reorderBar.hidden = false;
+  elements.add.hidden = true;
+  refresh();
+}
+
+function moveDraftCharacter(id, direction) {
+  const index = draftOrderIds.indexOf(id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= draftOrderIds.length) return;
+  [draftOrderIds[index], draftOrderIds[target]] = [draftOrderIds[target], draftOrderIds[index]];
+  refresh();
+}
+
+function finishCardReorder(save) {
+  if (save) saveCharacterOrder(draftOrderIds);
+  reorderMode = false;
+  draftOrderIds = [];
+  elements.reorderBar.hidden = true;
+  elements.add.hidden = false;
+  refresh();
 }
 
 function applyAutoReset() {
@@ -212,6 +270,8 @@ elements.search.addEventListener("input", refresh);
 elements.save.addEventListener("click", saveForm);
 elements.cancel.addEventListener("click", () => elements.dialog.close());
 elements.remove.addEventListener("click", removeCharacter);
+elements.reorderSave.addEventListener("click", () => finishCardReorder(true));
+elements.reorderCancel.addEventListener("click", () => finishCardReorder(false));
 elements.level.addEventListener("input", () => { elements.level.value = normalizeLevel(elements.level.value); });
 elements.previousLevel.addEventListener("input", () => { elements.previousLevel.value = normalizeLevel(elements.previousLevel.value); });
 elements.exp.addEventListener("blur", () => { elements.exp.value = normalizePercentage(elements.exp.value); });

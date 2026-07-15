@@ -11,18 +11,24 @@ function control(className, label, title, onClick) {
   return button;
 }
 
+function expForLevelUp(character) {
+  const after = character.afterDailyExp;
+  return after !== "" && after !== null && after !== undefined ? getPercentage(after) : getPercentage(character.previousExp);
+}
+
 export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all") {
   const search = keyword.trim().toLocaleLowerCase("ja-JP");
   const visible = characters
     .filter((character) => viewMode === "all" || (viewMode === "completed" ? character.completed : !character.completed))
     .filter((character) => `${character.name} ${character.job}`.toLocaleLowerCase("ja-JP").includes(search));
-  if (sortMode === "favorite") return [...visible].sort((a, b) => Number(b.favorite) - Number(a.favorite));
-  if (sortMode === "level") return [...visible].sort((a, b) => Number(b.level) - Number(a.level));
-  if (sortMode === "name") return [...visible].sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  if (sortMode === "favorite") return [...visible].sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order);
+  if (sortMode === "level") return [...visible].sort((a, b) => Number(b.level) - Number(a.level) || a.order - b.order);
+  if (sortMode === "name") return [...visible].sort((a, b) => a.name.localeCompare(b.name, "ja") || a.order - b.order);
+  if (sortMode === "levelUpSoon") return [...visible].sort((a, b) => expForLevelUp(b) - expForLevelUp(a) || a.order - b.order);
   return [...visible].sort((a, b) => a.order - b.order);
 }
 
-export function render({ list, counts, characters, keyword, sortMode, viewMode, onOpenDetail, onToggleFavorite, onChangeViewMode }) {
+export function render({ list, counts, progress, characters, keyword, sortMode, viewMode, reorderMode, onOpenDetail, onToggleFavorite, onChangeViewMode, onLongPress, onMoveReorder }) {
   const visible = filteredAndSorted(characters, keyword, sortMode, viewMode);
   list.replaceChildren();
   if (!visible.length) {
@@ -31,18 +37,14 @@ export function render({ list, counts, characters, keyword, sortMode, viewMode, 
     empty.textContent = characters.length ? "該当するキャラクターがいません" : "キャラクターがいません";
     list.append(empty);
   }
-  visible.forEach((character) => list.append(renderCard(character, onOpenDetail, onToggleFavorite)));
+  visible.forEach((character) => list.append(renderCard(character, { reorderMode, onOpenDetail, onToggleFavorite, onLongPress, onMoveReorder })));
   renderSummary(counts, characters, viewMode, onChangeViewMode);
+  renderDailyProgress(progress, characters);
 }
 
 export function renderSummary(counts, characters, viewMode, onChangeViewMode) {
   const completed = characters.filter((character) => character.completed).length;
-  const data = [
-    ["all", characters.length],
-    ["completed", completed],
-    ["remaining", characters.length - completed],
-  ];
-  data.forEach(([mode, count]) => {
+  [["all", characters.length], ["completed", completed], ["remaining", characters.length - completed]].forEach(([mode, count]) => {
     const button = counts[mode];
     button.querySelector("span:last-child").textContent = String(count);
     const selected = viewMode === mode;
@@ -52,54 +54,84 @@ export function renderSummary(counts, characters, viewMode, onChangeViewMode) {
   });
 }
 
-function percentageText(value) {
-  return `${getPercentage(value).toFixed(2)}%`;
+export function renderDailyProgress(progress, characters) {
+  const dailies = characters.flatMap((character) => character.dailies || []);
+  const done = dailies.filter((daily) => daily.checked).length;
+  const total = dailies.length;
+  const rate = total ? Math.round((done / total) * 100) : 0;
+  progress.count.textContent = `${done} / ${total}`;
+  progress.percent.textContent = `${rate}%`;
+  progress.fill.style.width = `${rate}%`;
+  progress.bar.setAttribute("aria-valuenow", String(rate));
 }
 
-function gainText(gain) {
-  if (gain === 0) return "±0.00%";
-  return `${gain > 0 ? "+" : ""}${gain.toFixed(2)}%`;
-}
+function percentageText(value) { return `${getPercentage(value).toFixed(2)}%`; }
+function gainText(gain) { return gain === 0 ? "±0.00%" : `${gain > 0 ? "+" : ""}${gain.toFixed(2)}%`; }
 
-export function renderCard(character, onOpenDetail, onToggleFavorite) {
+export function renderCard(character, actions) {
+  const { reorderMode, onOpenDetail, onToggleFavorite, onLongPress, onMoveReorder } = actions;
   const card = document.createElement("div");
   card.className = "character-card";
   card.classList.toggle("is-completed", character.completed);
   card.classList.toggle("is-favorite", character.favorite);
+  card.classList.toggle("is-reordering", reorderMode);
   card.tabIndex = 0;
   card.setAttribute("role", "button");
-  card.setAttribute("aria-label", `${character.name}の詳細を開く`);
+  card.setAttribute("aria-label", reorderMode ? `${character.name}を並び替え中` : `${character.name}の詳細を開く`);
   const header = document.createElement("div");
   header.className = "card-header";
   const status = document.createElement("span");
   status.className = "completion-status";
   status.textContent = character.completed ? "✓ 完了" : "○ 未完了";
-  header.append(control("favorite-toggle", character.favorite ? "★" : "☆", "お気に入り", () => onToggleFavorite(character.id)), status);
+  if (reorderMode) {
+    const hint = document.createElement("span");
+    hint.className = "reorder-hint";
+    hint.textContent = "並び替え";
+    header.append(hint, status);
+  } else {
+    header.append(control("favorite-toggle", character.favorite ? "★" : "☆", "お気に入り", () => onToggleFavorite(character.id)), status);
+  }
   const nameRow = document.createElement("div");
   nameRow.className = "character-name-row";
-  const name = document.createElement("div");
-  name.className = "character-name";
-  name.textContent = character.name;
-  nameRow.append(name);
+  nameRow.append(Object.assign(document.createElement("div"), { className: "character-name", textContent: character.name }));
   const levelRow = document.createElement("div");
   levelRow.className = "character-level-row";
+  levelRow.append(Object.assign(document.createElement("div"), { className: "character-level", textContent: `Lv.${character.level}` }));
   if (character.job) {
     const job = document.createElement("span");
     job.className = `job-badge ${seriesClass(character.series)}`;
     job.textContent = character.job;
     levelRow.append(job);
   }
-  const level = document.createElement("div");
-  level.className = "character-level";
-  level.textContent = `Lv.${character.level}`;
-  levelRow.prepend(level);
   card.append(header, nameRow, levelRow, renderExpSection(character));
-  card.addEventListener("click", () => onOpenDetail(character.id));
+  if (reorderMode) {
+    const controls = document.createElement("div");
+    controls.className = "card-reorder-controls";
+    controls.append(control("move-card-button", "↑", "上へ移動", () => onMoveReorder(character.id, -1)), control("move-card-button", "↓", "下へ移動", () => onMoveReorder(character.id, 1)));
+    card.append(controls);
+  }
+  let timer = null;
+  let startPoint = null;
+  let longPressed = false;
+  const clearPress = () => { if (timer) clearTimeout(timer); timer = null; };
+  card.addEventListener("pointerdown", (event) => {
+    if (reorderMode || event.target.closest(".favorite-toggle")) return;
+    startPoint = { x: event.clientX, y: event.clientY };
+    longPressed = false;
+    timer = setTimeout(() => { timer = null; longPressed = true; onLongPress(character.id); }, 600);
+  });
+  card.addEventListener("pointermove", (event) => {
+    if (!startPoint) return;
+    if (Math.hypot(event.clientX - startPoint.x, event.clientY - startPoint.y) > 12) clearPress();
+  });
+  card.addEventListener("pointerup", clearPress);
+  card.addEventListener("pointercancel", clearPress);
+  card.addEventListener("click", (event) => {
+    if (reorderMode || longPressed) { event.preventDefault(); return; }
+    onOpenDetail(character.id);
+  });
   card.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onOpenDetail(character.id);
-    }
+    if (!reorderMode && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpenDetail(character.id); }
   });
   return card;
 }
@@ -126,17 +158,9 @@ export function renderExpSection(character) {
   section.append(meta, bar);
   if (afterExists) {
     const gain = calculateDailyExpGain(character);
-    if (gain !== null) {
-      const gainElement = document.createElement("div");
-      gainElement.className = `daily-exp-gain ${gain < 0 ? "is-negative" : ""}`;
-      gainElement.textContent = `本日の獲得 ${gainText(gain)}`;
-      section.append(gainElement);
-    }
+    if (gain !== null) section.append(Object.assign(document.createElement("div"), { className: `daily-exp-gain ${gain < 0 ? "is-negative" : ""}`, textContent: `本日の獲得 ${gainText(gain)}` }));
   } else {
-    const next = document.createElement("div");
-    next.className = "next-level";
-    next.textContent = `次のレベルまで ${(100 - previous).toFixed(2)}%`;
-    section.append(next);
+    section.append(Object.assign(document.createElement("div"), { className: "next-level", textContent: `次のレベルまで ${(100 - previous).toFixed(2)}%` }));
   }
   return section;
 }

@@ -5,34 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>めいまねつーる</title>
   <link rel="stylesheet" href="style.css">
-  <style>
-    .summary-card { font: inherit; color: #fff; cursor: pointer; }
-    .summary-card.is-selected { border-color: #60a5fa; background: #1d4ed8; box-shadow: 0 0 0 2px #93c5fd55; }
-    .summary-card:focus-visible { outline: 3px solid #bfdbfe; outline-offset: 2px; }
-    .daily-exp-gain { margin-top: 6px; color: #bbf7d0; font-size: 13px; font-weight: 800; }
-    .daily-exp-gain.is-negative { color: #fca5a5; }
-    .detail-exp-list { display: grid; gap: 7px; margin-top: 10px; color: #334155; font-size: 14px; }
-    .detail-exp-gain { color: #047857; font-weight: 800; }
-    .detail-exp-gain.is-negative { color: #dc2626; }
-    .character-card { padding: 15px; }
-    .character-name-row { display: block; min-width: 0; margin-top: 7px; }
-    .character-level-row { display: flex; align-items: center; gap: 7px; min-width: 0; margin-top: 7px; }
-    .character-level { flex: 0 0 auto; margin-top: 0; }
-    .job-badge { max-width: calc(100% - 54px); }
-    .exp-meta { flex-wrap: nowrap; white-space: nowrap; }
-    .series-warrior { border-color: #f87171; background: #7f1d1d; color: #fef2f2; }
-    .series-mage { border-color: #60a5fa; background: #1e3a8a; color: #eff6ff; }
-    .series-archer { border-color: #4ade80; background: #166534; color: #f0fdf4; }
-    .series-thief { border-color: #c084fc; background: #581c87; color: #faf5ff; }
-    .series-pirate { border-color: #facc15; background: #854d0e; color: #fefce8; }
-    .series-hybrid { border-color: #a3a3a3; background: #404040; color: #fafafa; }
-    .character-order-dialog { color: #1e293b; }
-    .character-order-dialog p { margin-top: 8px; color: #64748b; font-size: 13px; }
-    .character-order-list { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; list-style: none; }
-    .character-order-list li { border: 1px solid #e2e8f0; border-radius: 10px; }
-    .character-order-dialog > div { display: flex; gap: 10px; }
-    .character-order-dialog > div button { flex: 1; min-height: 44px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
-  </style>
 </head>
 <body>
   <header class="header">
@@ -42,10 +14,16 @@
       <button id="summaryCompleted" class="summary-card" type="button" aria-pressed="false"><span class="title">完了</span><span id="completeCount">0</span></button>
       <button id="summaryRemaining" class="summary-card" type="button" aria-pressed="false"><span class="title">残り</span><span id="remainCount">0</span></button>
     </div>
+    <section class="daily-progress" aria-label="今日の進捗">
+      <div><span>今日の進捗</span><strong id="dailyProgressCount">0 / 0</strong><strong id="dailyProgressPercent">0%</strong></div>
+      <div id="dailyProgressBar" class="daily-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="dailyProgressFill"></div></div>
+    </section>
     <input id="searchBox" type="text" autocomplete="off" placeholder="🔍 キャラ検索">
+    <p id="reorderNotice" class="reorder-notice" role="status" hidden></p>
   </header>
   <main><section id="characterList" class="card-list"></section></main>
   <button id="addCharacterBtn" class="fab" type="button">＋</button>
+  <div id="reorderBar" class="reorder-bar" hidden><button id="saveReorderBtn" type="button">保存</button><button id="cancelReorderBtn" type="button">キャンセル</button></div>
   <dialog id="characterDialog">
     <h2 id="dialogTitle">キャラクター追加</h2>
     <div class="form">

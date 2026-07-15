@@ -1,7 +1,7 @@
 import { SETTINGS_STORAGE_KEY, readJson, writeJson } from "./storage.js";
 import { createId } from "./utils.js";
 
-export const SORT_MODES = ["default", "favorite", "level", "name"];
+export const SORT_MODES = ["default", "favorite", "level", "name", "levelUpSoon"];
 export const DEFAULT_DAILY_TITLES = ["デイリークエスト", "遠征", "ミニダン", "モンカニ"];
 
 const defaults = {
