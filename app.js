@@ -1,141 +1,319 @@
-// めいまねつーる v1.0α - Character Manager
+"use strict";
+
+/*
+ * めいまねつーる Phase 1
+ * キャラクターの作成・編集・削除・検索をブラウザの LocalStorage に保存する。
+ */
 
 const $ = (id) => document.getElementById(id);
 
 const STORAGE_KEY = "meimane.characters";
+const LEGACY_STORAGE_KEYS = ["meimane_characters"];
+const MAX_LEVEL = 999;
 
-let characters = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-let editingIndex = -1;
+const elements = {
+  list: $("characterList"),
+  search: $("searchBox"),
+  addButton: $("addCharacterBtn"),
+  dialog: $("characterDialog"),
+  dialogTitle: $("dialogTitle"),
+  name: $("characterName"),
+  level: $("characterLevel"),
+  exp: $("characterExp"),
+  saveButton: $("saveBtn"),
+  cancelButton: $("cancelBtn"),
+  deleteButton: $("deleteBtn"),
+  characterCount: $("characterCount"),
+  completeCount: $("completeCount"),
+  remainCount: $("remainCount"),
+};
 
-function saveStorage() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(characters));
+let characters = [];
+let editingId = null;
+
+/** A UUID keeps edit/delete targets stable even while the list is filtered. */
+function createId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  return `character-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 11)}`;
+}
+
+/** Convert full-width digits to ASCII digits. */
+function toHalfWidth(value) {
+  return String(value).replace(/[０-９]/g, (digit) =>
+    String.fromCharCode(digit.charCodeAt(0) - 0xfee0),
+  );
+}
+
+/** Return a level containing only digits, constrained to the supported range. */
+function normalizeLevel(value) {
+  const digits = toHalfWidth(value).replace(/[^0-9]/g, "");
+  if (!digits) return "";
+
+  const level = Math.min(MAX_LEVEL, Math.max(1, Number(digits)));
+  return String(level);
+}
+
+/** Previous EXP is optional; keep it as text so existing saved values remain intact. */
+function normalizeExp(value) {
+  const halfWidth = toHalfWidth(value);
+  const cleaned = halfWidth.replace(/[^0-9.]/g, "");
+  const [integer = "", ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  return decimalParts.length ? `${integer}.${decimal}` : integer;
+}
+
+function isRecord(value) {
+  return value && typeof value === "object" && typeof value.name === "string";
+}
+
+/**
+ * Normalise old records saved by earlier versions.  It deliberately retains
+ * unknown properties (for example daily) so a later phase can use them.
+ */
+function normalizeCharacter(record) {
+  const level = normalizeLevel(record.level);
+  return {
+    ...record,
+    id: typeof record.id === "string" && record.id ? record.id : createId(),
+    name: record.name.trim(),
+    level: level || "1",
+    previousExp: normalizeExp(record.previousExp ?? record.exp ?? ""),
+    daily: record.daily && typeof record.daily === "object" ? record.daily : {},
+    completed: record.completed === true,
+  };
+}
+
+function saveCharacters() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(characters));
+}
+
+function readStoredCharacters() {
+  const candidateKeys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
+
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error("Stored data is not an array.");
+
+      characters = parsed.filter(isRecord).map(normalizeCharacter);
+      saveCharacters();
+      return;
+    } catch (error) {
+      console.warn("めいまねつーるの保存データを読み込めませんでした。", error);
+    }
+  }
+
+  characters = [];
+}
+
+function getCharacter(id) {
+  return characters.find((character) => character.id === id);
+}
+
+function getSearchKeyword() {
+  return elements.search.value.trim().toLocaleLowerCase("ja-JP");
+}
+
+function getVisibleCharacters() {
+  const keyword = getSearchKeyword();
+  if (!keyword) return characters;
+
+  return characters.filter((character) =>
+    character.name.toLocaleLowerCase("ja-JP").includes(keyword),
+  );
 }
 
 function updateSummary() {
-    $("characterCount").textContent = characters.length;
-    $("completeCount").textContent = 0;
-    $("remainCount").textContent = characters.length;
+  const completed = characters.filter((character) => character.completed === true).length;
+  elements.characterCount.textContent = String(characters.length);
+  elements.completeCount.textContent = String(completed);
+  elements.remainCount.textContent = String(characters.length - completed);
+}
+
+function createTextElement(className, text) {
+  const element = document.createElement("div");
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function createCharacterCard(character) {
+  const card = document.createElement("div");
+  card.className = "character-card";
+  card.dataset.id = character.id;
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `${character.name}を編集`);
+
+  // Existing CSS is kept unchanged; these class names preserve its layout.
+  card.append(
+    createTextElement("character-name", character.name),
+    createTextElement("character-level", `Lv.${character.level}`),
+    createTextElement("daily-count", "0 / 0"),
+  );
+
+  card.addEventListener("click", () => openEditDialog(character.id));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openEditDialog(character.id);
+    }
+  });
+  return card;
 }
 
 function render() {
-    const list = $("characterList");
-    const keyword = $("searchBox").value.toLowerCase();
+  const visibleCharacters = getVisibleCharacters();
+  elements.list.replaceChildren();
 
-    list.innerHTML = "";
+  if (visibleCharacters.length === 0) {
+    const message = document.createElement("p");
+    message.className = "empty-message";
+    message.textContent = characters.length === 0 ? "キャラクターがいません" : "該当するキャラクターがいません";
+    elements.list.append(message);
+  } else {
+    visibleCharacters.forEach((character) => {
+      elements.list.append(createCharacterCard(character));
+    });
+  }
 
-    characters
-        .filter(c => c.name.toLowerCase().includes(keyword))
-        .forEach((c, index) => {
-
-            const card = document.createElement("div");
-            card.className = "character-card";
-
-            card.innerHTML = `
-                <div class="character-name">${c.name}</div>
-                <div class="character-level">Lv.${c.level}</div>
-                <div class="daily-count">0 / 0</div>
-            `;
-
-            card.onclick = () => openEdit(index);
-
-            list.appendChild(card);
-        });
-
-    updateSummary();
-    saveStorage();
+  updateSummary();
 }
 
-function openAdd() {
-    editingIndex = -1;
-
-    $("dialogTitle").textContent = "キャラクター追加";
-
-    $("characterName").value = "";
-    $("characterLevel").value = "";
-    $("characterExp").value = "";
-
-    $("deleteBtn").style.display = "none";
-
-    $("characterDialog").showModal();
+function resetForm() {
+  editingId = null;
+  elements.dialogTitle.textContent = "キャラクター追加";
+  elements.name.value = "";
+  elements.level.value = "";
+  elements.exp.value = "";
+  elements.deleteButton.hidden = true;
 }
 
-function openEdit(index) {
+function openAddDialog() {
+  resetForm();
+  elements.dialog.showModal();
+  elements.name.focus();
+}
 
-    editingIndex = index;
+function openEditDialog(id) {
+  const character = getCharacter(id);
+  if (!character) return;
 
-    const c = characters[index];
+  editingId = character.id;
+  elements.dialogTitle.textContent = "キャラクター編集";
+  elements.name.value = character.name;
+  elements.level.value = character.level;
+  elements.exp.value = character.previousExp;
+  elements.deleteButton.hidden = false;
+  elements.dialog.showModal();
+  elements.name.focus();
+}
 
-    $("dialogTitle").textContent = "キャラクター編集";
+function closeDialog() {
+  if (elements.dialog.open) elements.dialog.close();
+}
 
-    $("characterName").value = c.name;
-    $("characterLevel").value = c.level;
-    $("characterExp").value = c.previousExp || "";
+function readForm() {
+  return {
+    name: elements.name.value.trim(),
+    level: normalizeLevel(elements.level.value),
+    previousExp: normalizeExp(elements.exp.value),
+  };
+}
 
-    $("deleteBtn").style.display = "block";
-
-    $("characterDialog").showModal();
+function validateForm(data) {
+  if (!data.name) {
+    alert("キャラクター名を入力してください。");
+    elements.name.focus();
+    return false;
+  }
+  if (!data.level) {
+    alert("レベルを1〜999の数字で入力してください。");
+    elements.level.focus();
+    return false;
+  }
+  return true;
 }
 
 function saveCharacter() {
+  const data = readForm();
+  if (!validateForm(data)) return;
 
-    const name = $("characterName").value.trim();
-    const level = $("characterLevel").value.trim();
-    const exp = $("characterExp").value.trim();
+  // Show the normalised values before closing; this also handles pasted full-width input.
+  elements.level.value = data.level;
+  elements.exp.value = data.previousExp;
 
-    if (!name) {
-        alert("キャラ名を入力してください");
-        return;
+  if (editingId) {
+    const character = getCharacter(editingId);
+    if (!character) {
+      alert("編集するキャラクターが見つかりませんでした。");
+      closeDialog();
+      render();
+      return;
     }
+    Object.assign(character, data);
+  } else {
+    characters.push({
+      id: createId(),
+      ...data,
+      daily: {},
+      completed: false,
+    });
+  }
 
-    if (!level) {
-        alert("レベルを入力してください");
-        return;
-    }
-
-    const data = {
-        name,
-        level: Number(level),
-        previousExp: exp,
-        daily: {}
-    };
-
-    if (editingIndex === -1) {
-        characters.push(data);
-    } else {
-        characters[editingIndex] = data;
-    }
-
-    $("characterDialog").close();
-    render();
+  saveCharacters();
+  closeDialog();
+  render();
 }
 
 function deleteCharacter() {
+  const character = editingId ? getCharacter(editingId) : null;
+  if (!character) return;
 
-    if (editingIndex === -1) return;
+  if (!window.confirm(`「${character.name}」を削除しますか？`)) return;
 
-    if (!confirm("このキャラクターを削除しますか？")) return;
-
-    characters.splice(editingIndex, 1);
-
-    $("characterDialog").close();
-
-    render();
+  characters = characters.filter((item) => item.id !== character.id);
+  saveCharacters();
+  closeDialog();
+  render();
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+function bindEvents() {
+  elements.addButton.addEventListener("click", openAddDialog);
+  elements.search.addEventListener("input", render);
+  elements.saveButton.addEventListener("click", saveCharacter);
+  elements.cancelButton.addEventListener("click", closeDialog);
+  elements.deleteButton.addEventListener("click", deleteCharacter);
 
-    $("addCharacterBtn").addEventListener("click", openAdd);
+  elements.level.addEventListener("input", () => {
+    elements.level.value = normalizeLevel(elements.level.value);
+  });
+  elements.exp.addEventListener("input", () => {
+    elements.exp.value = normalizeExp(elements.exp.value);
+  });
 
-    $("saveBtn").addEventListener("click", saveCharacter);
+  elements.dialog.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.tagName !== "BUTTON") {
+      event.preventDefault();
+      saveCharacter();
+    }
+  });
 
-    $("cancelBtn").addEventListener("click", () => {
-        $("characterDialog").close();
-    });
+  // Let Escape close the dialog normally.  Editing state is reset next time it opens.
+}
 
-    $("deleteBtn").addEventListener("click", deleteCharacter);
+function init() {
+  readStoredCharacters();
+  bindEvents();
+  render();
+}
 
-    $("searchBox").addEventListener("input", render);
-
-    render();
-
-});
+init();
