@@ -20,7 +20,7 @@ export function render({ list, counts, characters, keyword, sortMode, onOpenDeta
 }
 
 function renderCard(character, onOpenDetail, onToggleFavorite) {
-  const card = document.createElement("div"); card.className = "character-card"; card.classList.toggle("is-completed", character.completed); card.classList.toggle("is-favorite", character.favorite); card.tabIndex = 0;
+  const card = document.createElement("div"); card.className = "character-card"; card.classList.toggle("is-completed", character.completed); card.classList.toggle("is-favorite", character.favorite); card.tabIndex = 0; card.setAttribute("role", "button"); card.setAttribute("aria-label", `${character.name}の詳細を開く`);
   const header = document.createElement("div"); header.className = "card-header";
   const status = document.createElement("span"); status.className = "completion-status"; status.textContent = character.completed ? "✓ 完了" : "○ 未完了";
   header.append(control("favorite-toggle", character.favorite ? "★" : "☆", "お気に入り", () => onToggleFavorite(character.id)), status);

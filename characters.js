@@ -11,7 +11,9 @@ export const saveCharacters = () => writeJson(CHARACTER_STORAGE_KEY, characters)
 export function normalizeCharacter(record) {
   const { daily: _legacyDaily, ...rest } = record;
   const job = typeof record.job === "string" ? record.job.trim().slice(0, 20) : "";
-  return { ...rest, id: typeof record.id === "string" && record.id ? record.id : createId(), name: record.name.trim(), job, series: seriesForJob(job, record.series || ""), level: normalizeLevel(record.level) || "1", previousExp: normalizePercentage(record.previousExp ?? record.exp ?? ""), dailies: normalizeDailies(record), completed: record.completed === true, favorite: record.favorite === true };
+  const dailies = normalizeDailies(record);
+  const completed = dailies.length > 0 && dailies.every((daily) => daily.checked);
+  return { ...rest, id: typeof record.id === "string" && record.id ? record.id : createId(), name: record.name.trim(), job, series: seriesForJob(job, record.series || ""), level: normalizeLevel(record.level) || "1", previousExp: normalizePercentage(record.previousExp ?? record.exp ?? ""), dailies, completed, favorite: record.favorite === true };
 }
 
 export function loadCharacters() {

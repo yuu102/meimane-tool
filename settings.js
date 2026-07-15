@@ -5,6 +5,10 @@ const defaults = { sortMode: "default", autoDailyReset: false, lastResetDate: ""
 
 export function loadSettings() {
   const stored = readJson(SETTINGS_STORAGE_KEY);
-  return { ...defaults, ...(stored && typeof stored === "object" ? stored : {}), sortMode: SORT_MODES.includes(stored?.sortMode) ? stored.sortMode : "default", autoDailyReset: stored?.autoDailyReset === true };
+  const source = stored && typeof stored === "object" ? stored : {};
+  return { ...defaults, ...source, sortMode: SORT_MODES.includes(source.sortMode) ? source.sortMode : "default", autoDailyReset: source.autoDailyReset === true };
 }
-export function saveSettings(settings) { writeJson(SETTINGS_STORAGE_KEY, settings); }
+
+export function saveSettings(settings) {
+  writeJson(SETTINGS_STORAGE_KEY, settings);
+}
