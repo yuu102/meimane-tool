@@ -16,10 +16,9 @@ const fields = createCharacterFields(elements);
 elements.job = fields.job; elements.series = fields.series;
 let editingId = null;
 let settings = loadSettings();
-let sortControl = null;
 
 function refresh() {
-  render({ list: elements.list, counts: elements.counts, characters: getCharacters(), keyword: elements.search.value, sortMode: settings.sortMode, onOpenDetail: (id) => detail.open(id), onToggleFavorite: toggleFavorite });
+  render({ list: elements.list, counts: elements.counts, characters: getCharacters(), keyword: elements.search.value, sortMode: settings.sortMode, hideCompleted: settings.hideCompleted, onOpenDetail: (id) => detail.open(id), onToggleFavorite: toggleFavorite });
 }
 
 function applyAutoReset() {
@@ -67,14 +66,25 @@ function moveDaily(characterId, dailyId, direction) {
 
 const daily = createDailyDialog({ find: findCharacter, addDaily, deleteDaily, moveDaily, refresh });
 const detail = createDetailDialog({ find: findCharacter, setDaily, refresh, edit: openEdit, editDailies: (id) => daily.open(id) });
+async function restoreBackup(file) {
+  try {
+    const records = await readBackup(file);
+    if (confirm("現在のデータを復元データで置き換えますか？")) {
+      replaceCharacters(records);
+      refresh();
+    }
+  } catch {
+    alert("JSON復元に失敗しました。");
+  }
+}
+
 const settingsDialog = createSettingsDialog(() => settings, (next) => {
   const enabledToday = !settings.autoDailyReset && next.autoDailyReset;
   settings = enabledToday
     ? { ...next, lastResetDate: localDateKey() }
     : next;
-  if (sortControl) sortControl.value = settings.sortMode;
   saveSettings(settings); applyAutoReset(); refresh();
-});
+}, { onBackup: () => downloadBackup(getCharacters()), onRestore: restoreBackup });
 
 function openAdd() {
   editingId = null; elements.title.textContent = "キャラクター追加";
@@ -109,25 +119,9 @@ function removeCharacter() {
 }
 
 function createToolbar() {
-  const bar = document.createElement("div"); bar.className = "tool-controls";
-  const label = document.createElement("label"); label.textContent = "並び替え";
-  const select = document.createElement("select"); select.setAttribute("aria-label", "並び替え"); sortControl = select;
-  [["default", "登録順"], ["favorite", "お気に入り順"], ["level", "Lv順"], ["name", "名前順"]].forEach(([value, text]) => select.append(new Option(text, value)));
-  select.value = settings.sortMode;
-  select.addEventListener("change", () => { settings = { ...settings, sortMode: select.value }; saveSettings(settings); refresh(); });
-  label.append(select);
-  const backup = document.createElement("button"); backup.textContent = "JSONバックアップ"; backup.addEventListener("click", () => downloadBackup(getCharacters()));
-  const restore = document.createElement("button"); restore.textContent = "JSON復元";
-  const input = document.createElement("input"); input.type = "file"; input.accept = "application/json,.json"; input.hidden = true;
-  restore.addEventListener("click", () => input.click());
-  input.addEventListener("change", async () => {
-    if (!input.files[0]) return;
-    try { const records = await readBackup(input.files[0]); if (confirm("現在のデータを復元データで置き換えますか？")) { replaceCharacters(records); refresh(); } }
-    catch { alert("JSON復元に失敗しました。"); }
-    input.value = "";
-  });
   const config = document.createElement("button"); config.textContent = "設定"; config.addEventListener("click", () => settingsDialog.open());
-  bar.append(label, backup, restore, config, input); elements.search.insertAdjacentElement("afterend", bar);
+  const bar = document.createElement("div"); bar.className = "tool-controls";
+  bar.append(config); elements.search.insertAdjacentElement("afterend", bar);
 }
 
 elements.add.addEventListener("click", openAdd);

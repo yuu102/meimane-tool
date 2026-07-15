@@ -3,16 +3,16 @@ import { seriesClass } from "./jobs.js";
 
 function control(className, label, title, onClick) { const button = document.createElement("button"); button.type = "button"; button.className = className; button.textContent = label; button.title = title; button.addEventListener("click", (event) => { event.stopPropagation(); onClick(); }); return button; }
 
-export function filteredAndSorted(characters, keyword, sortMode) {
-  const visible = characters.filter((character) => `${character.name} ${character.job}`.toLocaleLowerCase("ja-JP").includes(keyword.trim().toLocaleLowerCase("ja-JP")));
+export function filteredAndSorted(characters, keyword, sortMode, hideCompleted = false) {
+  const visible = characters.filter((character) => !hideCompleted || !character.completed).filter((character) => `${character.name} ${character.job}`.toLocaleLowerCase("ja-JP").includes(keyword.trim().toLocaleLowerCase("ja-JP")));
   if (sortMode === "favorite") return [...visible].sort((a, b) => Number(b.favorite) - Number(a.favorite));
   if (sortMode === "level") return [...visible].sort((a, b) => Number(b.level) - Number(a.level));
   if (sortMode === "name") return [...visible].sort((a, b) => a.name.localeCompare(b.name, "ja"));
   return visible;
 }
 
-export function render({ list, counts, characters, keyword, sortMode, onOpenDetail, onToggleFavorite }) {
-  const visible = filteredAndSorted(characters, keyword, sortMode); list.replaceChildren();
+export function render({ list, counts, characters, keyword, sortMode, hideCompleted, onOpenDetail, onToggleFavorite }) {
+  const visible = filteredAndSorted(characters, keyword, sortMode, hideCompleted); list.replaceChildren();
   if (!visible.length) { const empty = document.createElement("p"); empty.className = "empty-message"; empty.textContent = characters.length ? "該当するキャラクターがいません" : "キャラクターがいません"; list.append(empty); }
   visible.forEach((character) => list.append(renderCard(character, onOpenDetail, onToggleFavorite)));
   const completed = characters.filter((character) => character.completed).length;

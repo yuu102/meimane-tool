@@ -25,6 +25,19 @@ export function createDetailDialog(actions) {
   return { open(id) { characterId = id; draw(); dialog.showModal(); }, close: () => dialog.close(), refresh: draw };
 }
 
-export function createSettingsDialog(settings, onSave) {
-  const dialog = document.createElement("dialog"); dialog.className = "settings-dialog"; dialog.innerHTML = "<h2>設定</h2><label>並び替え <select><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option></select></label><label><input type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><div><button type='button'>保存</button><button type='button'>キャンセル</button></div>"; document.body.append(dialog); const select = dialog.querySelector("select"), check = dialog.querySelector("input"), [save, cancel] = dialog.querySelectorAll("button"); save.addEventListener("click", () => { onSave({ ...settings(), sortMode: select.value, autoDailyReset: check.checked }); dialog.close(); }); cancel.addEventListener("click", () => dialog.close()); return { open() { const value = settings(); select.value = value.sortMode; check.checked = value.autoDailyReset; dialog.showModal(); } };
+export function createSettingsDialog(settings, onSave, actions) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "settings-dialog";
+  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option></select></label><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
+  document.body.append(dialog);
+  const select = dialog.querySelector("select");
+  const hide = dialog.querySelector(".hide-completed");
+  const reset = dialog.querySelector(".auto-reset");
+  const input = dialog.querySelector("input[type=file]");
+  dialog.querySelector(".backup").addEventListener("click", actions.onBackup);
+  dialog.querySelector(".restore").addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { if (input.files[0]) actions.onRestore(input.files[0]); input.value = ""; });
+  dialog.querySelector(".save-settings").addEventListener("click", () => { onSave({ ...settings(), sortMode: select.value, autoDailyReset: reset.checked, hideCompleted: hide.checked }); dialog.close(); });
+  dialog.querySelector(".cancel-settings").addEventListener("click", () => dialog.close());
+  return { open() { const value = settings(); select.value = value.sortMode; reset.checked = value.autoDailyReset; hide.checked = value.hideCompleted; dialog.showModal(); } };
 }
