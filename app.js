@@ -1,7 +1,7 @@
 "use strict";
 
 /*
- * めいまねつーる Phase 1.1
+ * めいまねつーる Phase 2
  * キャラクターの追加・編集・削除・検索、完了・お気に入り状態を LocalStorage に保存します。
  */
 
@@ -11,6 +11,9 @@ const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = "meimane.characters";
 const LEGACY_STORAGE_KEYS = ["meimane_characters"];
 const MAX_LEVEL = 999;
+const DEFAULT_DAILY_GOAL = 3;
+const EXP_BASE_REQUIREMENT = 100;
+const EXP_PER_LEVEL = 25;
 
 // UI text is kept together so it is easy to change without touching rendering logic.
 const EMPTY_MESSAGE = "キャラクターがいません";
@@ -25,7 +28,7 @@ const SORT_DEFAULT = "default";
 const SORT_FAVORITE = "favorite";
 const SORT_LEVEL = "level";
 const SORT_NAME = "name";
-const BACKUP_VERSION = "1.2";
+const BACKUP_VERSION = "2.0";
 const BACKUP_FILE_PREFIX = "meimane-tool-backup";
 
 const elements = {
@@ -80,12 +83,40 @@ function normalizeExp(value) {
   return decimalParts.length ? `${integer}.${decimalParts.join("")}` : integer;
 }
 
+function normalizeNonNegativeInteger(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : fallback;
+}
+
+/** Migrate any prior daily shape to the Phase 2 progress shape. */
+function normalizeDaily(daily) {
+  const source = daily && typeof daily === "object" ? daily : {};
+  const goal = Math.max(1, normalizeNonNegativeInteger(source.goal ?? source.target, DEFAULT_DAILY_GOAL));
+  const progress = Math.min(
+    goal,
+    normalizeNonNegativeInteger(source.progress ?? source.count ?? source.completed, 0),
+  );
+
+  return { ...source, progress, goal };
+}
+
+/** EXP needed to reach the next level. Kept in one function for future level-up rules. */
+function getExpGoal(level) {
+  return EXP_BASE_REQUIREMENT + Number(level) * EXP_PER_LEVEL;
+}
+
+function getExpProgress(character) {
+  const current = Math.max(0, Number(character.previousExp) || 0);
+  const goal = getExpGoal(character.level);
+  return { current, goal, percent: Math.min(100, (current / goal) * 100) };
+}
+
 function isCharacterRecord(value) {
   return value && typeof value === "object" && typeof value.name === "string";
 }
 
 /**
- * Convert any older saved object to the Phase 1.1 shape.
+ * Convert any older saved object to the Phase 2 shape.
  * Unknown fields are retained to avoid losing future-phase data such as `daily`.
  */
 function normalizeCharacter(record) {
@@ -96,7 +127,7 @@ function normalizeCharacter(record) {
   const progress = {
     level: normalizeLevel(record.level) || "1",
     previousExp: normalizeExp(record.previousExp ?? record.exp ?? ""),
-    daily: record.daily && typeof record.daily === "object" ? record.daily : {},
+    daily: normalizeDaily(record.daily),
   };
   const status = {
     completed: record.completed === true,
@@ -207,6 +238,8 @@ function createControl(className, label, title, onClick) {
 function renderCard(character) {
   const card = document.createElement("div");
   card.className = "character-card";
+  card.classList.toggle("is-completed", character.completed);
+  card.classList.toggle("is-favorite", character.favorite);
   card.dataset.id = character.id;
   card.tabIndex = 0;
   card.setAttribute("role", "button");
@@ -237,11 +270,45 @@ function renderCard(character) {
   level.className = "character-level";
   level.textContent = `Lv.${character.level}`;
 
-  const daily = document.createElement("div");
-  daily.className = "daily-count";
-  daily.textContent = "0 / 0";
+  const exp = getExpProgress(character);
+  const expSection = document.createElement("div");
+  expSection.className = "exp-section";
+  const expMeta = document.createElement("div");
+  expMeta.className = "exp-meta";
+  expMeta.textContent = `EXP ${exp.current} / ${exp.goal}`;
+  const expBar = document.createElement("div");
+  expBar.className = "exp-bar";
+  expBar.setAttribute("role", "progressbar");
+  expBar.setAttribute("aria-valuemin", "0");
+  expBar.setAttribute("aria-valuemax", String(exp.goal));
+  expBar.setAttribute("aria-valuenow", String(Math.min(exp.current, exp.goal)));
+  const expFill = document.createElement("div");
+  expFill.className = "exp-fill";
+  expFill.style.width = `${exp.percent}%`;
+  expBar.append(expFill);
+  const nextLevel = document.createElement("div");
+  nextLevel.className = "next-level";
+  nextLevel.textContent = character.level === String(MAX_LEVEL)
+    ? "MAX LEVEL"
+    : `次のレベルまで ${Math.max(0, exp.goal - exp.current)} EXP`;
+  expSection.append(expMeta, expBar, nextLevel);
 
-  card.append(header, name, level, daily);
+  const daily = document.createElement("div");
+  daily.className = "daily-progress";
+  const dailyLabel = document.createElement("span");
+  dailyLabel.className = "daily-count";
+  dailyLabel.textContent = `デイリー ${character.daily.progress} / ${character.daily.goal}`;
+  const dailyControls = document.createElement("span");
+  dailyControls.className = "daily-controls";
+  dailyControls.append(
+    createControl("daily-step", "−", "デイリー進捗を減らす", () =>
+      updateDailyProgress(character.id, -1)),
+    createControl("daily-step", "＋", "デイリー進捗を増やす", () =>
+      updateDailyProgress(character.id, 1)),
+  );
+  daily.append(dailyLabel, dailyControls);
+
+  card.append(header, name, level, expSection, daily);
   card.addEventListener("click", () => openEditDialog(character.id));
   card.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -284,7 +351,21 @@ function toggleCompleted(id) {
   render();
 }
 
-/** Add Phase 1.2 controls without changing the existing HTML or CSS files. */
+/** Change the visible daily counter while keeping it within its configured goal. */
+function updateDailyProgress(id, amount) {
+  const character = getCharacter(id);
+  if (!character) return;
+
+  const daily = normalizeDaily(character.daily);
+  character.daily = {
+    ...daily,
+    progress: Math.max(0, Math.min(daily.goal, daily.progress + amount)),
+  };
+  saveCharacters();
+  render();
+}
+
+/** Add sorting and backup controls without changing the existing HTML file. */
 function createToolControls() {
   const toolbar = document.createElement("div");
   toolbar.className = "tool-controls";
@@ -455,7 +536,7 @@ function saveCharacter() {
     characters.push({
       id: createId(),
       ...data,
-      daily: {},
+      daily: normalizeDaily(),
       completed: false,
       favorite: false,
     });
