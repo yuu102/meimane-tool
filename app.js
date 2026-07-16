@@ -1,4 +1,4 @@
-import { localDateKey, normalizeLevel, normalizePercentage } from "./utils.js";
+import { localDateKey, normalizeExpInput, normalizeLevel, normalizePercentage } from "./utils.js";
 import { seriesForJob } from "./jobs.js";
 import {
   addCharacter,
@@ -214,8 +214,8 @@ function openEdit(id) {
   elements.series.value = seriesForJob(character.job, character.series);
   elements.level.value = character.level;
   elements.previousLevel.value = character.previousLevel;
-  elements.exp.value = character.previousExp;
-  elements.afterDailyExp.value = character.afterDailyExp;
+  elements.exp.value = normalizeExpInput(character.previousExp);
+  elements.afterDailyExp.value = normalizeExpInput(character.afterDailyExp);
   elements.remove.hidden = false;
   openModal(elements.dialog, elements.name);
 }
@@ -224,8 +224,8 @@ function saveForm() {
   const name = elements.name.value.trim();
   const level = normalizeLevel(elements.level.value);
   const previousLevel = normalizeLevel(elements.previousLevel.value) || level;
-  const previousExp = normalizePercentage(elements.exp.value);
-  const afterDailyExp = normalizePercentage(elements.afterDailyExp.value);
+  const previousExp = normalizeExpInput(elements.exp.value);
+  const afterDailyExp = normalizeExpInput(elements.afterDailyExp.value);
   if (!name || !level) {
     alert("キャラ名とレベルを入力してください。");
     return;
@@ -273,8 +273,10 @@ elements.reorderSave.addEventListener("click", () => finishCardReorder(true));
 elements.reorderCancel.addEventListener("click", () => finishCardReorder(false));
 elements.level.addEventListener("input", () => { elements.level.value = normalizeLevel(elements.level.value); });
 elements.previousLevel.addEventListener("input", () => { elements.previousLevel.value = normalizeLevel(elements.previousLevel.value); });
-elements.exp.addEventListener("blur", () => { elements.exp.value = normalizePercentage(elements.exp.value); });
-elements.afterDailyExp.addEventListener("blur", () => { elements.afterDailyExp.value = normalizePercentage(elements.afterDailyExp.value); });
+elements.exp.addEventListener("blur", () => { elements.exp.value = normalizeExpInput(elements.exp.value); });
+elements.afterDailyExp.addEventListener("blur", () => { elements.afterDailyExp.value = normalizeExpInput(elements.afterDailyExp.value); });
+elements.reorderBar.hidden = true;
+elements.add.hidden = false;
 bindModal(elements.dialog);
 elements.dialog.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.target.tagName !== "BUTTON") {

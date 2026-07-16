@@ -24,6 +24,29 @@ export function normalizePercentage(value) {
   return String(Math.round(number * 100) / 100);
 }
 
+/**
+ * フォーム入力専用のEXP整形。小数点なしの3桁以上は「百の位以下」を小数部として扱う。
+ * データ読込時は従来どおり normalizePercentage() を使用する。
+ */
+export function normalizeExpInput(value) {
+  const raw = toHalfWidth(value).trim();
+  if (!raw) return "";
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  if (!cleaned || cleaned === ".") return "";
+  const hasDecimalPoint = cleaned.includes(".");
+  const [integerPart = "", ...fractionParts] = cleaned.split(".");
+  const fractionPart = fractionParts.join("");
+  let number;
+  if (hasDecimalPoint) {
+    number = Number(`${integerPart || "0"}.${fractionPart}`);
+  } else {
+    const whole = Number(integerPart);
+    number = whole <= 100 ? whole : whole / 100;
+  }
+  if (!Number.isFinite(number)) return "";
+  return Math.min(100, Math.max(0, number)).toFixed(2);
+}
+
 export function getPercentage(value) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
