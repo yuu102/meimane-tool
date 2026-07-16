@@ -37,7 +37,7 @@ const elements = {
   reorderCancel: $("cancelReorderBtn"),
   reorderNotice: $("reorderNotice"),
   counts: { all: $("summaryAll"), completed: $("summaryCompleted"), remaining: $("summaryRemaining") },
-  progress: { count: $("dailyProgressCount"), percent: $("dailyProgressPercent"), bar: $("dailyProgressBar"), fill: $("dailyProgressFill") },
+  progress: { count: $("dailyProgressCount"), percent: $("dailyProgressPercent"), bar: $("dailyProgressBar"), fill: $("dailyProgressFill"), date: $("dailyProgressDate") },
 };
 const fields = createCharacterFields(elements);
 elements.job = fields.job;
@@ -114,11 +114,27 @@ function finishCardReorder(save) {
 }
 
 function applyAutoReset() {
-  if (!settings.autoDailyReset || settings.lastResetDate === localDateKey()) return;
+  if (!settings.autoDailyReset || settings.lastResetDate === localDateKey()) return false;
   getCharacters().forEach(resetDailies);
   settings = { ...settings, lastResetDate: localDateKey() };
   saveCharacters();
   saveSettings(settings);
+  return true;
+}
+
+function manualDailyReset() {
+  if (!confirm("デイリーのチェックをリセットして、今日分へ更新しますか？\n日課終了後EXPが入力されているキャラは、前日EXPへ引き継がれます。")) return false;
+  if (settings.lastResetDate === localDateKey() && !confirm("今日はすでに更新済みです。\nもう一度リセットしますか？")) return false;
+  getCharacters().forEach(resetDailies);
+  settings = { ...settings, lastResetDate: localDateKey() };
+  saveCharacters();
+  saveSettings(settings);
+  refresh();
+  return true;
+}
+
+function checkAutoResetOnResume() {
+  if (applyAutoReset()) refresh();
 }
 
 function toggleFavorite(id) {
@@ -184,6 +200,7 @@ const settingsDialog = createSettingsDialog(
     onBackup: () => downloadBackup(getCharacters(), settings),
     onRestore: restoreBackup,
     onOpenCharacterOrder: () => characterOrderDialog.open(),
+    onManualDailyReset: manualDailyReset,
   },
 );
 
@@ -285,9 +302,12 @@ elements.dialog.addEventListener("keydown", (event) => {
   }
 });
 
-// Version 1.2.0: 設定を先に読み込み、旧キャラクターデータへtemplateIdとorderを補完する。
+// Version 1.3.3: 設定を先に読み込み、旧キャラクターデータへtemplateIdとorderを補完する。
 saveSettings(settings);
 loadCharacters(settings.dailyTemplate);
 applyAutoReset();
 createToolbar();
 refresh();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkAutoResetOnResume(); });
+window.addEventListener("pageshow", checkAutoResetOnResume);
+window.addEventListener("focus", checkAutoResetOnResume);

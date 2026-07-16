@@ -1,4 +1,4 @@
-import { calculateDailyExpGain, getPercentage } from "./utils.js";
+import { calculateDailyExpGain, getPercentage, localDateKey } from "./utils.js";
 import { seriesClass } from "./jobs.js";
 
 function control(className, label, title, onClick) {
@@ -63,6 +63,7 @@ export function renderDailyProgress(progress, characters) {
   progress.percent.textContent = `${rate}%`;
   progress.fill.style.width = `${rate}%`;
   progress.bar.setAttribute("aria-valuenow", String(rate));
+  progress.date.textContent = localDateKey().slice(5).replace("-", "/");
 }
 
 function percentageText(value) { return `${getPercentage(value).toFixed(2)}%`; }
