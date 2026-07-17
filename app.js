@@ -13,7 +13,7 @@ import {
 } from "./characters.js";
 import { applyTemplateToCharacter, resetDailies, syncCompleted } from "./dailies.js";
 import { loadSettings, normalizeDailyTemplate, normalizeSettings, saveSettings } from "./settings.js";
-import { downloadBackup, readBackup } from "./backup.js";
+import { createBackupMetadata, downloadBackup, readBackup } from "./backup.js";
 import { render } from "./render.js";
 import { bindModal, closeModal, createCharacterFields, createCharacterOrderDialog, createDetailDialog, createSettingsDialog, openModal } from "./dialogs.js";
 
@@ -172,16 +172,26 @@ const characterOrderDialog = createCharacterOrderDialog({
 async function restoreBackup(file) {
   try {
     const backup = await readBackup(file);
-    if (!confirm("現在のデータを復元データで置き換えますか？")) return;
+    if (!confirm("バックアップを復元します。\n\n現在のデータは上書きされます。\n\n続行しますか？")) return;
     settings = backup.settings ? normalizeSettings(backup.settings) : settings;
+    settings = { ...settings, backupInfo: backup.metadata };
+    // 復元済みの当日チェックを直後の自動リセットで消さないよう、当日は更新済みとして扱う。
+    if (settings.autoDailyReset) settings.lastResetDate = localDateKey();
     replaceCharacters(backup.characters, settings.dailyTemplate);
     saveSettings(settings);
     viewMode = settings.hideCompleted ? "remaining" : "all";
-    applyAutoReset();
     refresh();
   } catch {
     alert("JSON復元に失敗しました。");
   }
+}
+
+function createBackup() {
+  const metadata = createBackupMetadata();
+  settings = { ...settings, backupInfo: metadata };
+  saveSettings(settings);
+  downloadBackup(getCharacters(), settings, metadata);
+  return metadata;
 }
 
 const settingsDialog = createSettingsDialog(
@@ -197,7 +207,7 @@ const settingsDialog = createSettingsDialog(
     refresh();
   },
   {
-    onBackup: () => downloadBackup(getCharacters(), settings),
+    onBackup: createBackup,
     onRestore: restoreBackup,
     onOpenCharacterOrder: () => characterOrderDialog.open(),
     onManualDailyReset: manualDailyReset,

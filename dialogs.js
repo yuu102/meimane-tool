@@ -154,7 +154,7 @@ export function createDetailDialog(actions) {
 export function createSettingsDialog(settings, onSave, actions) {
   const dialog = document.createElement("dialog");
   dialog.className = "settings-dialog";
-  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option><option value='levelUpSoon'>レベルアップが近い順</option></select></label><button class='character-order' type='button'>キャラクター並び替え</button><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><p class='last-reset-date'></p><button class='manual-daily-reset' type='button'>今日分に更新</button><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
+  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option><option value='levelUpSoon'>レベルアップが近い順</option></select></label><button class='character-order' type='button'>キャラクター並び替え</button><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><p class='last-reset-date'></p><button class='manual-daily-reset' type='button'>今日分に更新</button><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><section class='backup-info'><strong>最終バックアップ</strong><p></p></section><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
   document.body.append(dialog);
   bindModal(dialog);
   const select = dialog.querySelector("select");
@@ -165,6 +165,8 @@ export function createSettingsDialog(settings, onSave, actions) {
   const addButton = dialog.querySelector(".daily-template-add button");
   const fileInput = dialog.querySelector("input[type=file]");
   const lastReset = dialog.querySelector(".last-reset-date");
+  const backupInfo = dialog.querySelector(".backup-info p");
+  backupInfo.style.whiteSpace = "pre-line";
   let draftTemplate = [];
 
   const drawTemplate = () => {
@@ -226,7 +228,10 @@ export function createSettingsDialog(settings, onSave, actions) {
   addInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") { event.preventDefault(); addTemplate(); }
   });
-  dialog.querySelector(".backup").addEventListener("click", actions.onBackup);
+  dialog.querySelector(".backup").addEventListener("click", () => {
+    actions.onBackup();
+    backupInfo.textContent = formatBackupInfo(settings().backupInfo);
+  });
   dialog.querySelector(".character-order").addEventListener("click", actions.onOpenCharacterOrder);
   dialog.querySelector(".manual-daily-reset").addEventListener("click", () => {
     actions.onManualDailyReset();
@@ -252,6 +257,7 @@ export function createSettingsDialog(settings, onSave, actions) {
       reset.checked = value.autoDailyReset;
       hide.checked = value.hideCompleted;
       lastReset.textContent = `最終更新日：${formatResetDate(value.lastResetDate)}`;
+      backupInfo.textContent = formatBackupInfo(value.backupInfo);
       draftTemplate = value.dailyTemplate.map((item) => ({ ...item }));
       addInput.value = "";
       drawTemplate();
@@ -262,6 +268,12 @@ export function createSettingsDialog(settings, onSave, actions) {
 
 function formatResetDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value.replaceAll("-", "/") : "未更新";
+}
+
+function formatBackupInfo(value) {
+  if (!value?.backupDate) return "未作成";
+  const date = value.backupDate.replace("T", " ").replace(/([+-]\d{2}:\d{2}|Z)$/, "").slice(0, 16).replaceAll("-", "/");
+  return `${date}\nVersion ${value.appVersion || "Legacy"}`;
 }
 
 /** iPhoneでも確実に操作できる、↑↓ボタン式のキャラクター並び替え画面。 */

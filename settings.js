@@ -9,7 +9,15 @@ const defaults = {
   autoDailyReset: false,
   lastResetDate: "",
   hideCompleted: false,
+  backupInfo: null,
 };
+
+function normalizeBackupInfo(value) {
+  if (!value || typeof value !== "object") return null;
+  const appVersion = typeof value.appVersion === "string" && value.appVersion ? value.appVersion : "Legacy";
+  const backupDate = typeof value.backupDate === "string" && value.backupDate ? value.backupDate : "";
+  return { appVersion, backupDate };
+}
 
 function createDefaultTemplate() {
   return DEFAULT_DAILY_TITLES.map((title) => ({ id: createId(), title }));
@@ -45,6 +53,7 @@ export function normalizeSettings(value) {
     sortMode: SORT_MODES.includes(source.sortMode) ? source.sortMode : "default",
     autoDailyReset: source.autoDailyReset === true,
     hideCompleted: source.hideCompleted === true,
+    backupInfo: normalizeBackupInfo(source.backupInfo),
   };
 }
 
