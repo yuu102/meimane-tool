@@ -1,7 +1,7 @@
 import { SETTINGS_STORAGE_KEY, readJson, writeJson } from "./storage.js";
 import { createId } from "./utils.js";
 
-export const SORT_MODES = ["default", "favorite", "level", "name", "levelUpSoon"];
+export const SORT_MODES = ["default", "favorite", "level", "name", "levelUpSoon", "weeklyRemaining"];
 export const DEFAULT_DAILY_TITLES = ["デイリークエスト", "遠征", "ミニダン", "モンカニ"];
 
 const defaults = {
@@ -9,6 +9,8 @@ const defaults = {
   autoDailyReset: false,
   lastResetDate: "",
   hideCompleted: false,
+  weeklyIncompleteOnly: false,
+  lastWeeklyResetWeek: "",
   backupInfo: null,
 };
 
@@ -53,6 +55,8 @@ export function normalizeSettings(value) {
     sortMode: SORT_MODES.includes(source.sortMode) ? source.sortMode : "default",
     autoDailyReset: source.autoDailyReset === true,
     hideCompleted: source.hideCompleted === true,
+    weeklyIncompleteOnly: source.weeklyIncompleteOnly === true,
+    lastWeeklyResetWeek: typeof source.lastWeeklyResetWeek === "string" ? source.lastWeeklyResetWeek : "",
     backupInfo: normalizeBackupInfo(source.backupInfo),
   };
 }

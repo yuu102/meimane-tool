@@ -16,11 +16,13 @@ function expForLevelUp(character) {
   return after !== "" && after !== null && after !== undefined ? getPercentage(after) : getPercentage(character.previousExp);
 }
 
-export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all") {
+export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all", weeklyIncompleteOnly = false) {
   const search = keyword.trim().toLocaleLowerCase("ja-JP");
   const visible = characters
+    .filter((character) => !weeklyIncompleteOnly || !character.weeklyCompleted)
     .filter((character) => viewMode === "all" || (viewMode === "completed" ? character.completed : !character.completed))
     .filter((character) => `${character.name} ${character.job}`.toLocaleLowerCase("ja-JP").includes(search));
+  if (sortMode === "weeklyRemaining") return [...visible].sort((a, b) => Number(!!a.weeklyCompleted) - Number(!!b.weeklyCompleted) || a.order - b.order);
   if (sortMode === "favorite") return [...visible].sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order);
   if (sortMode === "level") return [...visible].sort((a, b) => Number(b.level) - Number(a.level) || a.order - b.order);
   if (sortMode === "name") return [...visible].sort((a, b) => a.name.localeCompare(b.name, "ja") || a.order - b.order);
@@ -28,8 +30,8 @@ export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all
   return [...visible].sort((a, b) => a.order - b.order);
 }
 
-export function render({ list, counts, progress, characters, keyword, sortMode, viewMode, reorderMode, onOpenDetail, onToggleFavorite, onChangeViewMode, onLongPress, onMoveReorder }) {
-  const visible = filteredAndSorted(characters, keyword, sortMode, viewMode);
+export function render({ list, counts, progress, characters, keyword, sortMode, viewMode, weeklyIncompleteOnly, onToggleWeekly, reorderMode, onOpenDetail, onToggleFavorite, onChangeViewMode, onLongPress, onMoveReorder }) {
+  const visible = filteredAndSorted(characters, keyword, sortMode, viewMode, weeklyIncompleteOnly);
   list.replaceChildren();
   if (!visible.length) {
     const empty = document.createElement("p");
@@ -37,7 +39,7 @@ export function render({ list, counts, progress, characters, keyword, sortMode, 
     empty.textContent = characters.length ? "該当するキャラクターがいません" : "キャラクターがいません";
     list.append(empty);
   }
-  visible.forEach((character) => list.append(renderCard(character, { reorderMode, onOpenDetail, onToggleFavorite, onLongPress, onMoveReorder })));
+  visible.forEach((character) => list.append(renderCard(character, { reorderMode, onOpenDetail, onToggleFavorite, onToggleWeekly, onLongPress, onMoveReorder })));
   renderSummary(counts, characters, viewMode, onChangeViewMode);
   renderDailyProgress(progress, characters);
 }
@@ -70,7 +72,7 @@ function percentageText(value) { return `${getPercentage(value).toFixed(2)}%`; }
 function gainText(gain) { return gain === 0 ? "±0.00%" : `${gain > 0 ? "+" : ""}${gain.toFixed(2)}%`; }
 
 export function renderCard(character, actions) {
-  const { reorderMode, onOpenDetail, onToggleFavorite, onLongPress, onMoveReorder } = actions;
+  const { reorderMode, onOpenDetail, onToggleFavorite, onToggleWeekly, onLongPress, onMoveReorder } = actions;
   const card = document.createElement("div");
   card.className = "character-card";
   card.classList.toggle("is-completed", character.completed);
@@ -90,7 +92,14 @@ export function renderCard(character, actions) {
     hint.textContent = "並び替え";
     header.append(hint, status);
   } else {
-    header.append(control("favorite-toggle", character.favorite ? "★" : "☆", "お気に入り", () => onToggleFavorite(character.id)), status);
+    const toggles = document.createElement("div");
+    toggles.className = "card-toggles";
+    const weekly = control("weekly-toggle", "🚢", character.weeklyCompleted ? "週クエスト完了（未完了に戻す）" : "週クエスト未完了（完了にする）", () => onToggleWeekly(character.id));
+    weekly.classList.toggle("is-weekly-completed", character.weeklyCompleted);
+    weekly.setAttribute("aria-label", weekly.title);
+    weekly.setAttribute("aria-pressed", String(character.weeklyCompleted));
+    toggles.append(control("favorite-toggle", character.favorite ? "★" : "☆", "お気に入り", () => onToggleFavorite(character.id)), weekly);
+    header.append(toggles, status);
   }
   const nameRow = document.createElement("div");
   nameRow.className = "character-name-row";
@@ -116,7 +125,7 @@ export function renderCard(character, actions) {
   let longPressed = false;
   const clearPress = () => { if (timer) clearTimeout(timer); timer = null; startPoint = null; };
   const startPress = (point, target) => {
-    if (reorderMode || target.closest?.(".favorite-toggle")) return;
+    if (reorderMode || target.closest?.("button")) return;
     startPoint = point;
     longPressed = false;
     timer = setTimeout(() => {
@@ -155,6 +164,7 @@ export function renderCard(character, actions) {
     onOpenDetail(character.id);
   });
   card.addEventListener("keydown", (event) => {
+    if (event.target !== card) return;
     if (!reorderMode && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpenDetail(character.id); }
   });
   return card;

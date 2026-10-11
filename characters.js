@@ -25,6 +25,7 @@ export function normalizeCharacter(record, template = []) {
     afterDailyExp: normalizePercentage(record.afterDailyExp ?? ""),
     dailies,
     favorite: record.favorite === true,
+    weeklyCompleted: record.weeklyCompleted === true,
   };
   syncCompleted(character);
   return character;
@@ -71,7 +72,7 @@ export function replaceCharacters(records, template = []) {
 
 export function addCharacter(data, dailyTemplate) {
   const maxOrder = characters.reduce((max, character) => Math.max(max, Number(character.order) || 0), -1);
-  const character = { id: createId(), ...data, order: maxOrder + 1, dailies: createDefaultDailies(dailyTemplate), favorite: false };
+  const character = { id: createId(), ...data, order: maxOrder + 1, dailies: createDefaultDailies(dailyTemplate), favorite: false, weeklyCompleted: false };
   syncCompleted(character);
   characters.push(character);
   saveCharacters();

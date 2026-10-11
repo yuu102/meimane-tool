@@ -14,6 +14,7 @@ import {
 import { applyTemplateToCharacter, resetDailies, syncCompleted } from "./dailies.js";
 import { loadSettings, normalizeDailyTemplate, normalizeSettings, saveSettings } from "./settings.js";
 import { createBackupMetadata, downloadBackup, readBackup } from "./backup.js";
+import { resetWeekIfNeeded } from "./weeklies.js";
 import { render } from "./render.js";
 import { bindModal, closeModal, createCharacterFields, createCharacterOrderDialog, createDetailDialog, createSettingsDialog, openModal } from "./dialogs.js";
 
@@ -64,6 +65,8 @@ function refresh() {
     keyword: elements.search.value,
     sortMode: settings.sortMode,
     viewMode,
+    weeklyIncompleteOnly: settings.weeklyIncompleteOnly,
+    onToggleWeekly: toggleWeekly,
     reorderMode,
     onOpenDetail: (id) => detail.open(id),
     onToggleFavorite: toggleFavorite,
@@ -74,7 +77,7 @@ function refresh() {
 }
 
 function canStartCardReorder() {
-  return viewMode === "all" && settings.sortMode === "default" && !elements.search.value.trim();
+  return !settings.weeklyIncompleteOnly && viewMode === "all" && settings.sortMode === "default" && !elements.search.value.trim();
 }
 
 function showReorderNotice(message) {
@@ -114,7 +117,9 @@ function finishCardReorder(save) {
 }
 
 function applyAutoReset() {
-  if (!settings.autoDailyReset || settings.lastResetDate === localDateKey()) return false;
+  const weeklyChanged = resetWeekIfNeeded(getCharacters(), settings);
+  if (weeklyChanged) { saveCharacters(); saveSettings(settings); }
+  if (!settings.autoDailyReset || settings.lastResetDate === localDateKey()) return weeklyChanged;
   getCharacters().forEach(resetDailies);
   settings = { ...settings, lastResetDate: localDateKey() };
   saveCharacters();
@@ -135,6 +140,15 @@ function manualDailyReset() {
 
 function checkAutoResetOnResume() {
   if (applyAutoReset()) refresh();
+}
+
+function toggleWeekly(id) {
+  applyAutoReset();
+  const character = findCharacter(id);
+  if (!character) return;
+  character.weeklyCompleted = !character.weeklyCompleted;
+  saveCharacters();
+  refresh();
 }
 
 function toggleFavorite(id) {
@@ -177,7 +191,10 @@ async function restoreBackup(file) {
     settings = { ...settings, backupInfo: backup.metadata };
     // 復元済みの当日チェックを直後の自動リセットで消さないよう、当日は更新済みとして扱う。
     if (settings.autoDailyReset) settings.lastResetDate = localDateKey();
+    settings.lastWeeklyResetWeek = backup.settings?.lastWeeklyResetWeek || "";
     replaceCharacters(backup.characters, settings.dailyTemplate);
+    resetWeekIfNeeded(getCharacters(), settings);
+    saveCharacters();
     saveSettings(settings);
     viewMode = settings.hideCompleted ? "remaining" : "all";
     refresh();
@@ -187,6 +204,7 @@ async function restoreBackup(file) {
 }
 
 function createBackup() {
+  checkAutoResetOnResume();
   const metadata = createBackupMetadata();
   settings = { ...settings, backupInfo: metadata };
   saveSettings(settings);
@@ -321,3 +339,6 @@ refresh();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkAutoResetOnResume(); });
 window.addEventListener("pageshow", checkAutoResetOnResume);
 window.addEventListener("focus", checkAutoResetOnResume);
+
+// Also detect week changes while the app stays in the foreground.
+setInterval(checkAutoResetOnResume, 1000);
