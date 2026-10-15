@@ -16,10 +16,10 @@ function expForLevelUp(character) {
   return after !== "" && after !== null && after !== undefined ? getPercentage(after) : getPercentage(character.previousExp);
 }
 
-export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all", weeklyIncompleteOnly = false) {
+export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all", weeklyViewMode = "all") {
   const search = keyword.trim().toLocaleLowerCase("ja-JP");
   const visible = characters
-    .filter((character) => !weeklyIncompleteOnly || !character.weeklyCompleted)
+    .filter((character) => weeklyViewMode === "completed" ? character.weeklyCompleted === true : (weeklyViewMode === "remaining" ? !character.weeklyCompleted : true))
     .filter((character) => viewMode === "all" || (viewMode === "completed" ? character.completed : !character.completed))
     .filter((character) => `${character.name} ${character.job}`.toLocaleLowerCase("ja-JP").includes(search));
   if (sortMode === "weeklyRemaining") return [...visible].sort((a, b) => Number(!!a.weeklyCompleted) - Number(!!b.weeklyCompleted) || a.order - b.order);
@@ -30,8 +30,8 @@ export function filteredAndSorted(characters, keyword, sortMode, viewMode = "all
   return [...visible].sort((a, b) => a.order - b.order);
 }
 
-export function render({ list, counts, progress, characters, keyword, sortMode, viewMode, weeklyIncompleteOnly, onToggleWeekly, reorderMode, onOpenDetail, onToggleFavorite, onChangeViewMode, onLongPress, onMoveReorder }) {
-  const visible = filteredAndSorted(characters, keyword, sortMode, viewMode, weeklyIncompleteOnly);
+export function render({ list, counts, progress, characters, keyword, sortMode, viewMode, weeklyViewMode, onToggleWeekly, reorderMode, onOpenDetail, onToggleFavorite, onChangeViewMode, onLongPress, onMoveReorder }) {
+  const visible = filteredAndSorted(characters, keyword, sortMode, viewMode, weeklyViewMode);
   list.replaceChildren();
   if (!visible.length) {
     const empty = document.createElement("p");

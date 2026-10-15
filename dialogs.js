@@ -154,11 +154,11 @@ export function createDetailDialog(actions) {
 export function createSettingsDialog(settings, onSave, actions) {
   const dialog = document.createElement("dialog");
   dialog.className = "settings-dialog";
-  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><label><input class='weekly-incomplete' type='checkbox'> 週クエスト未完了</label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option><option value='levelUpSoon'>レベルアップが近い順</option><option value='weeklyRemaining'>週クエスト未完了順</option></select></label><button class='character-order' type='button'>キャラクター並び替え</button><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><p class='last-reset-date'></p><button class='manual-daily-reset' type='button'>今日分に更新</button><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><section class='backup-info'><strong>最終バックアップ</strong><p></p></section><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
+  dialog.innerHTML = "<h2>設定</h2><h3>表示設定</h3><label><input class='hide-completed' type='checkbox'> 完了したキャラを非表示</label><label>ウィークリー表示 <select class='weekly-view' aria-label='ウィークリー表示'><option value='all'>すべて表示</option><option value='remaining'>未実施のみ表示</option><option value='completed'>実施済みのみ表示</option></select></label><h3>並び替え</h3><label>並び替え <select aria-label='並び替え'><option value='default'>登録順</option><option value='favorite'>お気に入り順</option><option value='level'>Lv順</option><option value='name'>名前順</option><option value='levelUpSoon'>レベルアップが近い順</option><option value='weeklyRemaining'>週クエスト未完了順</option></select></label><button class='character-order' type='button'>キャラクター並び替え</button><h3>デイリー編集</h3><p>保存時に全キャラクターへ反映されます。</p><ol class='daily-template-list'></ol><div class='daily-template-add'><input maxlength='40' placeholder='新しいデイリー名' aria-label='新しいデイリー名'><button type='button'>追加</button></div><h3>デイリー</h3><label><input class='auto-reset' type='checkbox'> デイリー自動リセット</label><p>ONの場合、日付が変わって最初に開いたとき、デイリーのチェックをリセットします。</p><p class='last-reset-date'></p><button class='manual-daily-reset' type='button'>今日分に更新</button><h3>データ管理</h3><div class='settings-data'><button class='backup' type='button'>💾 バックアップ</button><button class='restore' type='button'>📂 復元</button><input type='file' accept='application/json,.json' hidden></div><section class='backup-info'><strong>最終バックアップ</strong><p></p></section><div><button class='save-settings' type='button'>保存</button><button class='cancel-settings' type='button'>キャンセル</button></div>";
   document.body.append(dialog);
   bindModal(dialog);
-  const select = dialog.querySelector("select");
-  const weekly = dialog.querySelector(".weekly-incomplete");
+  const select = dialog.querySelector('select[aria-label="並び替え"]');
+  const weekly = dialog.querySelector(".weekly-view");
   const hide = dialog.querySelector(".hide-completed");
   const reset = dialog.querySelector(".auto-reset");
   const list = dialog.querySelector(".daily-template-list");
@@ -247,7 +247,7 @@ export function createSettingsDialog(settings, onSave, actions) {
       alert("デイリー名を入力してください。");
       return;
     }
-    onSave({ ...settings(), sortMode: select.value, autoDailyReset: reset.checked, hideCompleted: hide.checked, weeklyIncompleteOnly: weekly.checked, dailyTemplate });
+    onSave({ ...settings(), sortMode: select.value, autoDailyReset: reset.checked, hideCompleted: hide.checked, weeklyViewMode: weekly.value, dailyTemplate });
     closeModal(dialog);
   });
   dialog.querySelector(".cancel-settings").addEventListener("click", () => closeModal(dialog));
@@ -257,7 +257,7 @@ export function createSettingsDialog(settings, onSave, actions) {
       select.value = value.sortMode;
       reset.checked = value.autoDailyReset;
       hide.checked = value.hideCompleted;
-      weekly.checked = value.weeklyIncompleteOnly;
+      weekly.value = value.weeklyViewMode;
       lastReset.textContent = `最終更新日：${formatResetDate(value.lastResetDate)}`;
       backupInfo.textContent = formatBackupInfo(value.backupInfo);
       draftTemplate = value.dailyTemplate.map((item) => ({ ...item }));
@@ -339,3 +339,4 @@ export function createCharacterOrderDialog(actions) {
     },
   };
 }
+

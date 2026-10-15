@@ -2,6 +2,7 @@ import { SETTINGS_STORAGE_KEY, readJson, writeJson } from "./storage.js";
 import { createId } from "./utils.js";
 
 export const SORT_MODES = ["default", "favorite", "level", "name", "levelUpSoon", "weeklyRemaining"];
+export const WEEKLY_VIEW_MODES = ["all", "remaining", "completed"];
 export const DEFAULT_DAILY_TITLES = ["デイリークエスト", "遠征", "ミニダン", "モンカニ"];
 
 const defaults = {
@@ -10,6 +11,7 @@ const defaults = {
   lastResetDate: "",
   hideCompleted: false,
   weeklyIncompleteOnly: false,
+  weeklyViewMode: "all",
   lastWeeklyResetWeek: "",
   backupInfo: null,
 };
@@ -48,6 +50,8 @@ export function normalizeDailyTemplate(value) {
 
 export function normalizeSettings(value) {
   const source = value && typeof value === "object" ? value : {};
+  const weeklyViewMode = WEEKLY_VIEW_MODES.includes(source.weeklyViewMode)
+    ? source.weeklyViewMode : (source.weeklyIncompleteOnly === true ? "remaining" : "all");
   return {
     ...defaults,
     ...source,
@@ -55,7 +59,9 @@ export function normalizeSettings(value) {
     sortMode: SORT_MODES.includes(source.sortMode) ? source.sortMode : "default",
     autoDailyReset: source.autoDailyReset === true,
     hideCompleted: source.hideCompleted === true,
-    weeklyIncompleteOnly: source.weeklyIncompleteOnly === true,
+    weeklyViewMode,
+    // Keep the v1.4.0 field as a derived compatibility value, never a second filter.
+    weeklyIncompleteOnly: weeklyViewMode === "remaining",
     lastWeeklyResetWeek: typeof source.lastWeeklyResetWeek === "string" ? source.lastWeeklyResetWeek : "",
     backupInfo: normalizeBackupInfo(source.backupInfo),
   };
@@ -66,8 +72,5 @@ export function loadSettings() {
 }
 
 export function saveSettings(settings) {
-  writeJson(SETTINGS_STORAGE_KEY, {
-    ...settings,
-    dailyTemplate: normalizeDailyTemplate(settings.dailyTemplate),
-  });
+  writeJson(SETTINGS_STORAGE_KEY, normalizeSettings(settings));
 }

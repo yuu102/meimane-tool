@@ -65,7 +65,7 @@ function refresh() {
     keyword: elements.search.value,
     sortMode: settings.sortMode,
     viewMode,
-    weeklyIncompleteOnly: settings.weeklyIncompleteOnly,
+    weeklyViewMode: settings.weeklyViewMode,
     onToggleWeekly: toggleWeekly,
     reorderMode,
     onOpenDetail: (id) => detail.open(id),
@@ -77,7 +77,7 @@ function refresh() {
 }
 
 function canStartCardReorder() {
-  return !settings.weeklyIncompleteOnly && viewMode === "all" && settings.sortMode === "default" && !elements.search.value.trim();
+  return settings.weeklyViewMode === "all" && viewMode === "all" && settings.sortMode === "default" && !elements.search.value.trim();
 }
 
 function showReorderNotice(message) {
@@ -216,9 +216,11 @@ const settingsDialog = createSettingsDialog(
   () => settings,
   (next) => {
     const previousTemplate = settings.dailyTemplate;
+    const previousHideCompleted = settings.hideCompleted;
     const normalized = normalizeSettings({ ...next, dailyTemplate: normalizeDailyTemplate(next.dailyTemplate) });
     const enabledToday = !settings.autoDailyReset && normalized.autoDailyReset;
     settings = enabledToday ? { ...normalized, lastResetDate: localDateKey() } : normalized;
+    if (previousHideCompleted !== settings.hideCompleted) viewMode = settings.hideCompleted ? "remaining" : "all";
     applyDailyTemplate(previousTemplate, settings.dailyTemplate);
     saveSettings(settings);
     applyAutoReset();

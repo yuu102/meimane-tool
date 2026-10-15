@@ -1,4 +1,4 @@
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 
 function validateCharacters(records) {
   return Array.isArray(records) && records.every((record) => record && typeof record === "object" && typeof record.name === "string");
